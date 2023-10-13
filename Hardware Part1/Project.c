@@ -50,7 +50,19 @@
 // Global variables
 //-----------------------------------------------------------------------------
 
+uint32_t lastTime = 0; // Last captured time
+uint32_t pulseWidth;
 
+typedef enum
+{
+    NEC_IDLE,
+    NEC_START,
+    NEC_DATA
+} NEC_State;
+
+NEC_State currentState = NEC_IDLE;
+uint32_t data = 0; // Stores the decoded data
+uint8_t bitCount = 0; // Bit counter for the 32-bits of data
 
 //-----------------------------------------------------------------------------
 // Subroutines
@@ -135,6 +147,36 @@ void initPWM(void)
 }
 */
 
+/*
+void enableTimerMode() // Time Enable
+{
+    // ISR // PB1 // T2CCP1
+    TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
+    TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
+    TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
+    TIMER2_TAILR_R = 40000000;                       // set load value to 40e6 for 1 Hz interrupt rate
+    TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
+
+    NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 40 (TIMER2B)
+    TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
+}
+*/
+
+void enableTimerMode() // Time Enable
+{
+    // ISR // PB1 // T2CCP1
+    TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
+    TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
+    TIMER2_TAMR_R = TIMER_TAMR_TAMR_CAP;             // configure for capture mode
+    TIMER2_CTL_R |= TIMER_CTL_TACM;                  // configure for edge-time mode and count up on rising edge
+    TIMER2_TAILR_R = 40000000;                       // initialize the load register
+    TIMER2_IMR_R = TIMER_IMR_CAEIM;                  // enable capture match interrupt
+
+    NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 39 (TIMER2A)
+    TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
+}
+
+
 //-----------------------------------------------------------------------------
 // Initialize Hardware
 //-----------------------------------------------------------------------------
@@ -143,6 +185,7 @@ void initHw(void)
 {
     // Initialize system clock to 40 MHz
     initSystemClockTo40Mhz();
+    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R2; // Enable clock for Timer 2
     _delay_cycles(3);
 
     enablePort(PORTA);
@@ -241,6 +284,82 @@ void setPwmDutyCycle(uint8_t side, uint16_t pwmA, uint16_t pwmB)
             break;
     }
 }
+
+/*
+void TIMER2A_Handler(void)
+{
+    uint32_t currentTime;
+
+    // Get the current time
+    currentTime = TIMER2_TAR_R;
+
+    // Calculate the pulse width
+    pulseWidth = lastTime - currentTime;
+    lastTime = currentTime;
+
+    // Decode NEC protocol here based on the pulseWidth
+    // ...
+
+    // Clear the interrupt
+    TIMER2_ICR_R = TIMER_ICR_CAECINT;
+}
+*/
+
+void IRdecoder(void)
+{
+    uint32_t currentTime;
+
+    // Get the current time
+    currentTime = TIMER2_TAR_R;
+
+    // Calculate the pulse width
+    pulseWidth = lastTime - currentTime;
+    lastTime = currentTime;
+
+    // Decode NEC protocol based on the pulseWidth and currentState
+    switch(currentState)
+    {
+        case NEC_IDLE:
+            if(pulseWidth >= 9000 && pulseWidth <= 9100) // Roughly check for 9ms
+                currentState = NEC_START;
+            break;
+
+        case NEC_START:
+            if(pulseWidth >= 4500 && pulseWidth <= 4600) // Roughly check for 4.5ms
+            {
+                currentState = NEC_DATA;
+                data = 0;
+                bitCount = 0;
+            }
+            else
+                currentState = NEC_IDLE;
+            break;
+
+        case NEC_DATA:
+            if(pulseWidth >= 500 && pulseWidth <= 600) // Roughly check for 562.5µs
+            {
+                data <<= 1; // Shift data left
+                bitCount++;
+            }
+            else if(pulseWidth >= 1600 && pulseWidth <= 1700) // Roughly check for 1.6875ms
+            {
+                data <<= 1;
+                data |= 1; // Set the least significant bit
+                bitCount++;
+            }
+
+            if(bitCount == 32)
+            {
+                // Here, the variable 'data' has the 32-bit NEC data
+                // Process or store the data as required
+                currentState = NEC_IDLE;
+            }
+            break;
+    }
+    TIMER2_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
+}
+
+
 
 //-----------------------------------------------------------------------------
 // Main
