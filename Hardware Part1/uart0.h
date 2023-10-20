@@ -53,6 +53,7 @@ char* getFieldString(USER_DATA* data, uint32_t fieldNumber);
 int32_t getFieldInteger(USER_DATA* data, uint32_t fieldNumber);
 double getFieldDouble(USER_DATA* data, uint32_t fieldNumber);
 bool  isCommand(USER_DATA* data, const char strCommand[], uint32_t minArguments);
+void printfUart0(char* format, ...);
 
 //void enableCounterMode();    //Frequency Enable
 //void disableCounterMode();   // Frequency Disable

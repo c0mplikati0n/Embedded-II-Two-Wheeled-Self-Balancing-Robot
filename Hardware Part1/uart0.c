@@ -1,6 +1,9 @@
 // UART0 Library
 // Jason Losh
 
+// This is based on Lab 2's Uart.c, adds a could of new libraries to the header,
+// and a new function at the footer.
+
 //-----------------------------------------------------------------------------
 // Hardware Target
 //-----------------------------------------------------------------------------
@@ -21,8 +24,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include "tm4c123gh6pm.h"
 #include "uart0.h"
+#include "conversion.h"
 
 // PortA masks
 #define UART_TX_MASK 2
@@ -306,3 +311,74 @@ bool  isCommand(USER_DATA* data, const char strCommand[], uint32_t minArguments)
     return false;
 }
 
+void printfUart0(char* format, ...)
+{
+    char *traverse;
+    int input;
+    double inputFloat;
+
+    char* returnStr;
+
+    va_list arg;
+    va_start(arg, format);
+
+    for(traverse = format; *traverse != '\0'; traverse++)
+    {
+        while( *traverse != '%' )
+        {
+            if( *traverse == '\0')
+            {
+                return;
+            }
+            else
+            {
+                putcUart0(*traverse);
+                traverse++;
+            }
+        }
+
+        traverse++;
+
+        switch(*traverse)
+        {
+            // CHAR
+            case 'c' :
+                input = va_arg(arg,char);     //Fetch char argument
+                putcUart0(input);
+                break;
+            // HEX LOWER CASE
+            case 'x':
+                input = va_arg(arg,uint32_t);
+                putsUart0(uint32_to_strhex(input, LOWERCASE));
+                break;
+            // HEX UPPER CASE
+            case 'X':
+                input = va_arg(arg,uint32_t);
+                putsUart0(uint32_to_strhex(input, UPPERCASE));
+                break;
+            // INT
+            case 'd':
+                input = va_arg(arg, int);
+                putsUart0(int_to_str(input));
+                break;
+            // UNSIGNED INT
+            case 'u':
+                input = va_arg(arg, uint32_t);
+                putsUart0(uint_to_str(input));
+                break;
+            // STRING
+            case 's':
+                input = va_arg(arg, char*);
+                putsUart0(input);
+                break;
+            // 32 BIT FLOAT
+            case 'f':
+                input = va_arg(arg, int*);
+                putsUart0(float_to_str(input));
+                break;
+        }
+    }
+
+    //Module 3: Closing argument list to necessary clean-up
+    va_end(arg);
+}

@@ -17,11 +17,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "tm4c123gh6pm.h"
+
 #include "gpio.h"
+
 #include "wait.h"
 #include "clock.h"
+
 #include "uart0.h"
-#include "adc0.h"
+#include "conversion.h"
 
 // Pins
 #define I2C1SCL         PORTA, 6 // I2C 1 SCL
@@ -50,6 +53,8 @@
 // Global variables
 //-----------------------------------------------------------------------------
 
+/*
+
 uint32_t lastTime = 0; // Last captured time
 uint32_t pulseWidth;
 
@@ -63,18 +68,29 @@ typedef enum
 NEC_State currentState = NEC_IDLE;
 uint32_t data = 0; // Stores the decoded data
 uint8_t bitCount = 0; // Bit counter for the 32-bits of data
+*/
 
 //-----------------------------------------------------------------------------
 // Subroutines
 //-----------------------------------------------------------------------------
 
+/*
 void initPWM(void){
     // Enable clocks
     SYSCTL_RCGCPWM_R |= SYSCTL_RCGCPWM_R0; // Pg. 354
     _delay_cycles(3);
 
+    //GPIO_PORTC_AFSEL_R |= 16 | 32;// select auxilary function
+    //GPIO_PORTB_AFSEL_R |= 64 | 128;// select auxilary function
+
+    setPinAuxFunction(OUT_PWM_1, GPIO_PCTL_PC4_M0PWM6); // M0PWM6 // PC4
+    setPinAuxFunction(OUT_PWM_2, GPIO_PCTL_PC5_M0PWM7); // M0PWM7 // PC5
+    setPinAuxFunction(OUT_PWM_3, GPIO_PCTL_PB6_M0PWM0); // M0PWM0 // PB6
+    setPinAuxFunction(OUT_PWM_4, GPIO_PCTL_PB7_M0PWM1); // M0PWM1 // PB7
+
     GPIO_PORTC_PCTL_R &= GPIO_PCTL_PC4_M | GPIO_PCTL_PC5_M;    // enable PWM
     GPIO_PORTB_PCTL_R &= GPIO_PCTL_PB6_M | GPIO_PCTL_PB7_M;    // enable PWM
+
     GPIO_PORTC_PCTL_R |= GPIO_PCTL_PC4_M0PWM6 | GPIO_PCTL_PC5_M0PWM7;
     GPIO_PORTB_PCTL_R |= GPIO_PCTL_PB6_M0PWM0 | GPIO_PCTL_PB7_M0PWM1;
 
@@ -105,18 +121,19 @@ void initPWM(void){
 
     PWM0_ENABLE_R = PWM_ENABLE_PWM0EN | PWM_ENABLE_PWM1EN | PWM_ENABLE_PWM6EN | PWM_ENABLE_PWM7EN; // enable outputs
 }
+*/
 
-/*
+//*
 void initPWM(void)
 {
     // Enable clocks
     SYSCTL_RCGCPWM_R |= SYSCTL_RCGCPWM_R0; // Pg. 354
     _delay_cycles(3);
 
-    setPinAuxFunction(OUT_PWM_1, GPIO_PCTL_PC4_M0PWM6) // M0PWM6 // PC4
-    setPinAuxFunction(OUT_PWM_2, GPIO_PCTL_PC5_M0PWM7) // M0PWM7 // PC5
-    setPinAuxFunction(OUT_PWM_3, GPIO_PCTL_PB6_M0PWM0) // M0PWM0 // PB6
-    setPinAuxFunction(OUT_PWM_4, GPIO_PCTL_PB7_M0PWM1) // M0PWM1 // PB7
+    setPinAuxFunction(OUT_PWM_1, GPIO_PCTL_PC4_M0PWM6); // M0PWM6 // PC4
+    setPinAuxFunction(OUT_PWM_2, GPIO_PCTL_PC5_M0PWM7); // M0PWM7 // PC5
+    setPinAuxFunction(OUT_PWM_3, GPIO_PCTL_PB6_M0PWM0); // M0PWM0 // PB6
+    setPinAuxFunction(OUT_PWM_4, GPIO_PCTL_PB7_M0PWM1); // M0PWM1 // PB7
 
     SYSCTL_SRPWM_R = SYSCTL_SRPWM_R0;                // reset PWM0 module
     SYSCTL_SRPWM_R = 0;                              // leave reset state
@@ -138,16 +155,16 @@ void initPWM(void)
    PWM0_0_CMPA_R = 0; // M0PWM0 // PB6
    PWM0_0_CMPB_R = 0; // M0PWM1 // PB7
    PWM0_3_CMPA_R = 0; // M0PWM6 // PC4
-   PWM0_3_CMPB_R = 0; // M0PWM7 // PC5 // (0=always low, 1023=always high)
+   PWM0_3_CMPB_R = 0; // M0PWM7 // PC5 // (0 = always low, 1023 = always high)
 
     PWM0_0_CTL_R = PWM_0_CTL_ENABLE;                 // turn-on PWM0 generator 0
     PWM0_3_CTL_R = PWM_0_CTL_ENABLE;                 // turn-on PWM0 generator 3
 
-    PWM0_ENABLE_R = PWM_ENABLE_PWM0EN| PWM_ENABLE_PWM1EN | PWM_ENABLE_PWM6EN | PWM_ENABLE_PWM7EN;
+    PWM0_ENABLE_R = PWM_ENABLE_PWM0EN | PWM_ENABLE_PWM1EN | PWM_ENABLE_PWM6EN | PWM_ENABLE_PWM7EN;
 }
-*/
+//*/
 
-/*
+//*
 void enableTimerMode() // Time Enable
 {
     // ISR // PB1 // T2CCP1
@@ -160,22 +177,23 @@ void enableTimerMode() // Time Enable
     NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 40 (TIMER2B)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
-*/
+//*/
 
+/*
 void enableTimerMode() // Time Enable
 {
     // ISR // PB1 // T2CCP1
     TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER2_TAMR_R = TIMER_TAMR_TAMR_CAP;             // configure for capture mode
-    TIMER2_CTL_R |= TIMER_CTL_TACM;                  // configure for edge-time mode and count up on rising edge
+    //TIMER2_CTL_R |= GPTM_CTL_TACM;                  // configure for edge-time mode and count up on rising edge
     TIMER2_TAILR_R = 40000000;                       // initialize the load register
     TIMER2_IMR_R = TIMER_IMR_CAEIM;                  // enable capture match interrupt
 
     NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
-
+*/
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -197,11 +215,14 @@ void initHw(void)
     
     selectPinPushPullOutput(OUT_ENABLE);
 
+    selectPinPushPullOutput(OUT_PWM_1);
+    selectPinPushPullOutput(OUT_PWM_2);
+    selectPinPushPullOutput(OUT_PWM_3);
+    selectPinPushPullOutput(OUT_PWM_4);
+
     selectPinDigitalInput(TIMER_IN_L);
     selectPinDigitalInput(TIMER_IN_R);
     selectPinDigitalInput(TIMER_IN_IR);
-
-
 
     selectPinPushPullOutput(RED_LED);
     selectPinPushPullOutput(GREEN_LED);
@@ -215,72 +236,36 @@ void initHw(void)
     enablePinPullup(PB_2);
 }
 
-void changeState(uint8_t side)
-{
-    switch (side)
-    {
-    case 1:
-        //setPinValue(OUT_PWM_A1, 1);
-        //setPinValue(OUT_PWM_A2, 0);
-        //setPinValue(OUT_PWM_B1, 0);
-        //setPinValue(OUT_PWM_B2, 0);
-
-        PWM0_0_CMPA_R = 500;
-        PWM0_0_CMPB_R = 0;
-        PWM0_3_CMPA_R = 0;
-        PWM0_3_CMPB_R = 0;
-        break;
-
-    case 2:
-        //setPinValue(OUT_PWM_A1, 0);
-        //setPinValue(OUT_PWM_A2, 0);
-        //setPinValue(OUT_PWM_B1, 1);
-        //setPinValue(OUT_PWM_B2, 0);
-
-        PWM0_0_CMPA_R = 0;
-        PWM0_0_CMPB_R = 0;
-        PWM0_3_CMPA_R = 500;
-        PWM0_3_CMPB_R = 0;
-        break;
-
-    case 3:
-        //setPinValue(OUT_PWM_A1, 0);
-        //setPinValue(OUT_PWM_A2, 1);
-        //setPinValue(OUT_PWM_B1, 0);
-        //setPinValue(OUT_PWM_B2, 0);
-
-        PWM0_0_CMPA_R = 0;
-        PWM0_0_CMPB_R = 500;
-        PWM0_3_CMPA_R = 0;
-        PWM0_3_CMPB_R = 0;
-        break;
-
-    case 4:
-        //setPinValue(OUT_PWM_A1, 0);
-        //setPinValue(OUT_PWM_A2, 0);
-        //setPinValue(OUT_PWM_B1, 0);
-        //setPinValue(OUT_PWM_B2, 1);
-
-        PWM0_0_CMPA_R = 0;
-        PWM0_0_CMPB_R = 0;
-        PWM0_3_CMPA_R = 0;
-        PWM0_3_CMPB_R = 500;
-        break;
-    }
-    waitMicrosecond(10);  // Wait 1 second
-}
-
 void setPwmDutyCycle(uint8_t side, uint16_t pwmA, uint16_t pwmB)
 {
     switch(side)
     {
         case 0:
-            PWM0_1_CMPA_R = pwmA;
-            PWM0_1_CMPB_R = pwmB;
+            PWM0_0_CMPA_R = pwmA;
+            PWM0_0_CMPB_R = pwmB;
             break;
         case 1:
-            PWM0_2_CMPA_R = pwmA;
-            PWM0_2_CMPB_R = pwmB;
+            PWM0_3_CMPA_R = pwmA;
+            PWM0_3_CMPB_R = pwmB;
+            break;
+    }
+}
+
+void setDirection(uint8_t side, uint16_t pwmAL, uint16_t pwmBL, uint16_t pwmAR, uint16_t pwmBR)
+{
+    switch(side)
+    {
+        case 0:
+            PWM0_0_CMPA_R = pwmAL;
+            PWM0_0_CMPB_R = pwmBL;
+            PWM0_3_CMPA_R = pwmAR;
+            PWM0_3_CMPB_R = pwmBR;
+            break;
+        case 1:
+            PWM0_0_CMPA_R = pwmAL;
+            PWM0_0_CMPB_R = pwmBL;
+            PWM0_3_CMPA_R = pwmAR;
+            PWM0_3_CMPB_R = pwmBR;
             break;
     }
 }
@@ -305,6 +290,7 @@ void TIMER2A_Handler(void)
 }
 */
 
+///*
 void IRdecoder(void)
 {
     uint32_t currentTime;
@@ -358,7 +344,7 @@ void IRdecoder(void)
     }
     TIMER2_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
 }
-
+//*/
 
 
 //-----------------------------------------------------------------------------
@@ -370,6 +356,8 @@ int main(void)
     // Initialize hardware
     initHw();
     initUart0();
+    setUart0BaudRate(115200, 40e6);
+    initPWM();
 
     //waitMicrosecond(1000000);
 
@@ -380,12 +368,23 @@ int main(void)
     PWM0_3_CMPA_R = 0; //
     PWM0_3_CMPB_R = 0; //
 
-    setPwmDutyCycle();
+    //setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
+    //setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
 
+    //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
+    //setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
+
+
+
+    //setDirection(0, 0, 1000, 1000, 0); // Both wheels go backwards
+    //setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
+
+    //printfUart0("\nInitialization Success\n\n");
 
     while (true)
     {
-
+        //do nothing?
+        //printfUart0("\n Success\n");
     }
 }
 
