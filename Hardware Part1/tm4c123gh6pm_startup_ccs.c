@@ -56,7 +56,7 @@ extern uint32_t __STACK_TOP;
 //*****************************************************************************
 // To be added by user
 //extern void wideTimer1Isr(void);
-//extern void IRdecoder(void);
+extern void IRdecoder(void);
 
 
 //*****************************************************************************
@@ -110,8 +110,8 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Timer 1 subtimer A
     IntDefaultHandler,                      // Timer 1 subtimer B
     IntDefaultHandler,                      // Timer 2 subtimer A
-    IntDefaultHandler,                // Timer 2 subtimer B
-    //IRdecoder,                      // Timer 2 subtimer B
+    //IntDefaultHandler,                // Timer 2 subtimer B
+    IRdecoder,                      // Timer 2 subtimer B
     IntDefaultHandler,                      // Analog Comparator 0
     IntDefaultHandler,                      // Analog Comparator 1
     IntDefaultHandler,                      // Analog Comparator 2
