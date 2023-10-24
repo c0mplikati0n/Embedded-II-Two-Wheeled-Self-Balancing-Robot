@@ -107,7 +107,7 @@ void initPWM(void)
     PWM0_ENABLE_R = PWM_ENABLE_PWM0EN | PWM_ENABLE_PWM1EN | PWM_ENABLE_PWM6EN | PWM_ENABLE_PWM7EN;
 }
 
-//*
+/*
 void enableTimerMode() // Time Enable
 {
     // ISR // PB1 // T2CCP1
@@ -120,9 +120,9 @@ void enableTimerMode() // Time Enable
     NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 40 (TIMER2B)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
-//*/
+*/
 
-/*
+///*
 void enableTimerMode() // Time Enable
 {
     // ISR // PB1 // T2CCP1
@@ -136,7 +136,7 @@ void enableTimerMode() // Time Enable
     NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
-*/
+//*/
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -146,7 +146,7 @@ void initHw(void)
 {
     // Initialize system clock to 40 MHz
     initSystemClockTo40Mhz();
-    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R2; // Enable clock for Timer 2
+    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R0 | SYSCTL_RCGCTIMER_R1 | SYSCTL_RCGCTIMER_R2; // Enable clock for Timer 2
     _delay_cycles(3);
 
     enablePort(PORTA);
@@ -183,11 +183,11 @@ void setPwmDutyCycle(uint8_t side, uint16_t pwmA, uint16_t pwmB)
 {
     switch(side)
     {
-        case 0:
+        case 0: // Left Wheel
             PWM0_0_CMPA_R = pwmA;
             PWM0_0_CMPB_R = pwmB;
             break;
-        case 1:
+        case 1: // Right Wheel
             PWM0_3_CMPA_R = pwmA;
             PWM0_3_CMPB_R = pwmB;
             break;
@@ -198,13 +198,13 @@ void setDirection(uint8_t side, uint16_t pwmAL, uint16_t pwmBL, uint16_t pwmAR, 
 {
     switch(side)
     {
-        case 0:
+        case 0: // Backwards
             PWM0_0_CMPA_R = pwmAL;
             PWM0_0_CMPB_R = pwmBL;
             PWM0_3_CMPA_R = pwmAR;
             PWM0_3_CMPB_R = pwmBR;
             break;
-        case 1:
+        case 1: // Forward
             PWM0_0_CMPA_R = pwmAL;
             PWM0_0_CMPB_R = pwmBL;
             PWM0_3_CMPA_R = pwmAR;
@@ -272,6 +272,14 @@ void IRdecoder(void)
     TIMER2_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
 }
 
+void turnOffAll()
+{
+    PWM0_0_CMPA_R = 0; // Left Wheel
+    PWM0_0_CMPB_R = 0; // Left Wheel
+    PWM0_3_CMPA_R = 0; // Right Wheel
+    PWM0_3_CMPB_R = 0; // Right Wheel
+}
+
 //-----------------------------------------------------------------------------
 // Main
 //-----------------------------------------------------------------------------
@@ -289,10 +297,7 @@ int main(void)
 
     setPinValue(OUT_ENABLE, 1);
 
-    PWM0_0_CMPA_R = 0; // Left Wheel
-    PWM0_0_CMPB_R = 0; // Left Wheel
-    PWM0_3_CMPA_R = 0; // Right Wheel
-    PWM0_3_CMPB_R = 0; // Right Wheel
+    turnOffAll();
 
     //setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
     //setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
