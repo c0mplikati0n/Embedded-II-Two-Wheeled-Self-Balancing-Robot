@@ -22,6 +22,8 @@
 #include "clock.h"
 #include "uart0.h"
 #include "conversion.h"
+#include "motorControl.h"
+#include "nvic.h"
 
 // Pins
 #define I2C1SCL         PORTA, 6 // I2C 1 SCL
@@ -37,7 +39,8 @@
 #define TIMER_IN_L      PORTD, 6 // WT5CCP0
 #define TIMER_IN_R      PORTC, 6 // WT1CCP0
 
-#define TIMER_IN_IR     PORTB, 1 // T2CCP1
+//#define TIMER_IN_IR     PORTB, 1 // T2CCP1
+#define TIMER_IN_IR     PORTD, 2 // WT3CCP0
 
 #define RED_LED         PORTF, 1
 #define GREEN_LED       PORTF, 3
@@ -68,45 +71,6 @@ uint8_t bitCount = 0; // Bit counter for the 32-bits of data
 // Subroutines
 //-----------------------------------------------------------------------------
 
-void initPWM(void)
-{
-    // Enable clocks
-    SYSCTL_RCGCPWM_R |= SYSCTL_RCGCPWM_R0; // Pg. 354
-    _delay_cycles(3);
-
-    setPinAuxFunction(OUT_PWM_1, GPIO_PCTL_PC4_M0PWM6); // M0PWM6 // PC4
-    setPinAuxFunction(OUT_PWM_2, GPIO_PCTL_PC5_M0PWM7); // M0PWM7 // PC5
-    setPinAuxFunction(OUT_PWM_3, GPIO_PCTL_PB6_M0PWM0); // M0PWM0 // PB6
-    setPinAuxFunction(OUT_PWM_4, GPIO_PCTL_PB7_M0PWM1); // M0PWM1 // PB7
-
-    SYSCTL_SRPWM_R = SYSCTL_SRPWM_R0;                // reset PWM0 module
-    SYSCTL_SRPWM_R = 0;                              // leave reset state
-
-    PWM0_0_CTL_R = 0;                                // turn-off PWM0 generator 0 (drives outs 0 and 1)
-    PWM0_3_CTL_R = 0;                                // turn-off PWM0 generator 3 (drives outs 6 and 7)
-
-    PWM0_0_GENA_R = PWM_0_GENA_ACTCMPAD_ZERO | PWM_0_GENA_ACTLOAD_ONE; // output 0 on PWM0, gen 0a, cmpa // Pg. 1282
-    PWM0_0_GENB_R = PWM_0_GENB_ACTCMPBD_ZERO | PWM_0_GENB_ACTLOAD_ONE; // output 1 on PWM0, gen 0b, cmpb // Pg. 1282
-    PWM0_3_GENA_R = PWM_0_GENA_ACTCMPAD_ZERO | PWM_0_GENA_ACTLOAD_ONE; // output 6 on PWM0, gen 3a, cmpa // Pg. 1282
-    PWM0_3_GENB_R = PWM_0_GENB_ACTCMPBD_ZERO | PWM_0_GENB_ACTLOAD_ONE; // output 7 on PWM0, gen 3b, cmpb // Pg. 1282
-
-    PWM0_0_LOAD_R = 1024; // set frequency to 40 MHz sys clock / 2 / 1024 = 19.53125 kHz
-    PWM0_3_LOAD_R = 1024; // set frequency to 40 MHz sys clock / 2 / 1024 = 19.53125 kHz
-
-    // invert outputs so duty cycle increases with increasing compare values
-    PWM0_INVERT_R = PWM_INVERT_PWM0INV | PWM_INVERT_PWM1INV | PWM_INVERT_PWM6INV | PWM_INVERT_PWM7INV;
-
-    PWM0_0_CMPA_R = 0; // M0PWM0 // PB6
-    PWM0_0_CMPB_R = 0; // M0PWM1 // PB7
-    PWM0_3_CMPA_R = 0; // M0PWM6 // PC4
-    PWM0_3_CMPB_R = 0; // M0PWM7 // PC5 // (0 = always low, 1023 = always high)
-
-    PWM0_0_CTL_R = PWM_0_CTL_ENABLE;                 // turn-on PWM0 generator 0
-    PWM0_3_CTL_R = PWM_0_CTL_ENABLE;                 // turn-on PWM0 generator 3
-
-    PWM0_ENABLE_R = PWM_ENABLE_PWM0EN | PWM_ENABLE_PWM1EN | PWM_ENABLE_PWM6EN | PWM_ENABLE_PWM7EN;
-}
-
 /*
 void enableTimerMode() // Time Enable
 {
@@ -117,12 +81,12 @@ void enableTimerMode() // Time Enable
     TIMER2_TAILR_R = 40000000;                       // set load value to 40e6 for 1 Hz interrupt rate
     TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
 
-    NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 40 (TIMER2B)
+    NVIC_EN0_R |= 1 << (INT_TIMER2A-16);             // turn-on interrupt 40 (TIMER2B)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
 */
 
-///*
+/*
 void enableTimerMode() // Time Enable
 {
     // ISR // PB1 // T2CCP1
@@ -136,7 +100,7 @@ void enableTimerMode() // Time Enable
     NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
-//*/
+*/
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -146,7 +110,8 @@ void initHw(void)
 {
     // Initialize system clock to 40 MHz
     initSystemClockTo40Mhz();
-    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R0 | SYSCTL_RCGCTIMER_R1 | SYSCTL_RCGCTIMER_R2; // Enable clock for Timer 2
+    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R0 | SYSCTL_RCGCTIMER_R1 | SYSCTL_RCGCTIMER_R2 | SYSCTL_RCGCTIMER_R3; // Enable clock for Timer 2
+    SYSCTL_RCGCWTIMER_R |= SYSCTL_RCGCWTIMER_R0 | SYSCTL_RCGCWTIMER_R1 | SYSCTL_RCGCWTIMER_R2 | SYSCTL_RCGCWTIMER_R3;
     _delay_cycles(3);
 
     enablePort(PORTA);
@@ -165,7 +130,12 @@ void initHw(void)
 
     selectPinDigitalInput(TIMER_IN_L);
     selectPinDigitalInput(TIMER_IN_R);
+
     selectPinDigitalInput(TIMER_IN_IR);
+    setPinAuxFunction(TIMER_IN_IR, GPIO_PCTL_PD2_WT3CCP0);
+    //setPinAuxFunction(TIMER_IN_IR, GPIO_PCTL_PD2_WT3CCP0);
+    //GPIO_PORTD_AFSEL_R |= 0x01; // Enable alternate function for PD0
+    //GPIO_PORTD_PCTL_R |= GPIO_PCTL_PD0_WT2CCP0; // Configure PD0 as WT2CCP0
 
     selectPinPushPullOutput(RED_LED);
     selectPinPushPullOutput(GREEN_LED);
@@ -179,55 +149,27 @@ void initHw(void)
     enablePinPullup(PB_2);
 }
 
-void setPwmDutyCycle(uint8_t side, uint16_t pwmA, uint16_t pwmB)
+void enableTimerMode()
 {
-    switch(side)
-    {
-        case 0: // Left Wheel
-            PWM0_0_CMPA_R = pwmA;
-            PWM0_0_CMPB_R = pwmB;
-            break;
-        case 1: // Right Wheel
-            PWM0_3_CMPA_R = pwmA;
-            PWM0_3_CMPB_R = pwmB;
-            break;
-    }
+    WTIMER3_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
+    WTIMER3_CFG_R = 4;                               // configure as 32-bit counter (A only)
+    WTIMER3_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
+    WTIMER3_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from positive edge to positive edge
+    WTIMER3_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
+    WTIMER3_TAV_R = 0;                               // zero counter for first period
+    WTIMER3_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
+    NVIC_EN3_R |= 1 << (INT_WTIMER3A-16-96);         // turn-on interrupt 116 (WTIMER3A)
 }
 
-void setDirection(uint8_t side, uint16_t pwmAL, uint16_t pwmBL, uint16_t pwmAR, uint16_t pwmBR)
-{
-    switch(side)
-    {
-        case 0: // Backwards
-            PWM0_0_CMPA_R = pwmAL;
-            PWM0_0_CMPB_R = pwmBL;
-            PWM0_3_CMPA_R = pwmAR;
-            PWM0_3_CMPB_R = pwmBR;
-            break;
-        case 1: // Forward
-            PWM0_0_CMPA_R = pwmAL;
-            PWM0_0_CMPB_R = pwmBL;
-            PWM0_3_CMPA_R = pwmAR;
-            PWM0_3_CMPB_R = pwmBR;
-            break;
-    }
-}
+volatile uint32_t timeElapsed = 0;  // global variable to store time
+volatile uint32_t currentTime = 0;
 
 void IRdecoder(void)
 {
-    uint32_t currentTime;
-
-    // Get the current time
-    currentTime = TIMER2_TAR_R;
-
     // Calculate the pulse width
-    pulseWidth = lastTime - currentTime;
-    lastTime = currentTime;
-
-    printfUart0("\nPulse Width =     %d \n", pulseWidth);
-    printfUart0("\nCurrent Time =    %d \n", currentTime);
-    printfUart0("\nLast Time =       %d \n", lastTime);
-
+    pulseWidth = WTIMER3_TAV_R;
+    printfUart0("Pulse Width: %d\n", pulseWidth);
+    WTIMER3_TAV_R = 0;
 
     // Decode NEC protocol based on the pulseWidth and currentState
     switch(currentState)
@@ -264,20 +206,19 @@ void IRdecoder(void)
             if(bitCount == 32)
             {
                 // Here, the variable 'data' has the 32-bit NEC data
-                // Process or store the data as required
+                printfUart0("Decoded Data: %x\n", data);
                 currentState = NEC_IDLE;
             }
             break;
     }
-    TIMER2_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
+
+    WTIMER3_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
 }
 
-void turnOffAll()
+void wideTimer3Isr()
 {
-    PWM0_0_CMPA_R = 0; // Left Wheel
-    PWM0_0_CMPB_R = 0; // Left Wheel
-    PWM0_3_CMPA_R = 0; // Right Wheel
-    PWM0_3_CMPB_R = 0; // Right Wheel
+    togglePinValue(GREEN_LED);
+    IRdecoder();
 }
 
 //-----------------------------------------------------------------------------
@@ -299,6 +240,16 @@ int main(void)
 
     turnOffAll();
 
+    printfUart0("\n\nInitialization Success\n\n");
+
+    //selectPinInterruptLowLevel(TIMER_IN_IR); // maybe ?
+    //selectPinInterruptBothEdges(TIMER_IN_IR); // maybe
+    //enablePinInterrupt(TIMER_IN_IR);
+    //clearPinInterrupt(TIMER_IN_IR);
+    //enableTimerMode();
+    //enableNvicInterrupt(INT_GPIOD);
+    //enableTimerMode();
+
     //setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
     //setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
     //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
@@ -307,12 +258,31 @@ int main(void)
     //setDirection(0, 0, 1000, 1000, 0); // Both wheels go backwards
     //setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
 
+    //setPwmDutyCycle(0, 750, 0); // Left wheel moves forward    // Lowest value = 750
+    //setPwmDutyCycle(1, 0, 760); // Right Wheel moves forward   // Lowest value = 760
+    //setPwmDutyCycle(0, 0, 740); // Left wheel moves backwards  // Lowest value = 740
+    //setPwmDutyCycle(1, 750, 0); // Right wheel moves backwards // Lowest value = 750
+
     //printfUart0("\nInitialization Success\n\n");
+
+    uint32_t testing = 10;
 
     while (true)
     {
         //do nothing?
         //printfUart0("\n Success\n");
+        //printfUart0("Edge Count: %d\n", edgeCount);
+        //printfUart0("Time Elapsed: %d\n", timeElapsed);
+//        waitMicrosecond(testing);
+//        timeElapsed = WTIMER3_TAV_R;                    // read counter input
+//        printfUart0("Time Elapsed: %d\n", timeElapsed);
+//        WTIMER3_TAV_R = 0;                              // zero counter for next edge
+//        testing++;
+//
+//        if(testing>1000)
+//        {
+//            testing = 1;
+//        }
     }
 }
 
