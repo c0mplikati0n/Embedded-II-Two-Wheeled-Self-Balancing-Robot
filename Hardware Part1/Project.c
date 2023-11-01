@@ -1,6 +1,3 @@
-// Implementing Motor and IR Sensor
-// Xavier A. Portillo-Catalan
-// UTA ID: 1001779115
 
 //-----------------------------------------------------------------------------
 // Hardware Target
@@ -39,7 +36,6 @@
 #define TIMER_IN_L      PORTD, 6 // WT5CCP0
 #define TIMER_IN_R      PORTC, 6 // WT1CCP0
 
-//#define TIMER_IN_IR     PORTB, 1 // T2CCP1
 #define TIMER_IN_IR     PORTD, 2 // WT3CCP0
 
 #define RED_LED         PORTF, 1
@@ -71,36 +67,7 @@ uint8_t bitCount = 0; // Bit counter for the 32-bits of data
 // Subroutines
 //-----------------------------------------------------------------------------
 
-/*
-void enableTimerMode() // Time Enable
-{
-    // ISR // PB1 // T2CCP1
-    TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
-    TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
-    TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER2_TAILR_R = 40000000;                       // set load value to 40e6 for 1 Hz interrupt rate
-    TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
 
-    NVIC_EN0_R |= 1 << (INT_TIMER2A-16);             // turn-on interrupt 40 (TIMER2B)
-    TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
-}
-*/
-
-/*
-void enableTimerMode() // Time Enable
-{
-    // ISR // PB1 // T2CCP1
-    TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
-    TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
-    TIMER2_TAMR_R = TIMER_TAMR_TAMR_CAP;             // configure for capture mode
-    //TIMER2_CTL_R |= GPTM_CTL_TACM;                  // configure for edge-time mode and count up on rising edge
-    TIMER2_TAILR_R = 40000000;                       // initialize the load register
-    TIMER2_IMR_R = TIMER_IMR_CAEIM;                  // enable capture match interrupt
-
-    NVIC_EN0_R |= 1 << (INT_TIMER2B-16);             // turn-on interrupt 39 (TIMER2A)
-    TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
-}
-*/
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -133,9 +100,6 @@ void initHw(void)
 
     selectPinDigitalInput(TIMER_IN_IR);
     setPinAuxFunction(TIMER_IN_IR, GPIO_PCTL_PD2_WT3CCP0);
-    //setPinAuxFunction(TIMER_IN_IR, GPIO_PCTL_PD2_WT3CCP0);
-    //GPIO_PORTD_AFSEL_R |= 0x01; // Enable alternate function for PD0
-    //GPIO_PORTD_PCTL_R |= GPIO_PCTL_PD0_WT2CCP0; // Configure PD0 as WT2CCP0
 
     selectPinPushPullOutput(RED_LED);
     selectPinPushPullOutput(GREEN_LED);
@@ -164,24 +128,35 @@ void enableTimerMode()
 volatile uint32_t timeElapsed = 0;  // global variable to store time
 volatile uint32_t currentTime = 0;
 
-void IRdecoder(void)
+void IRdecoder(void) //fine tweak still
 {
-    // Calculate the pulse width
-    pulseWidth = WTIMER3_TAV_R;
-    printfUart0("Pulse Width: %d\n", pulseWidth);
+    // Calculate the pulse width in microseconds
+    pulseWidth = WTIMER3_TAV_R / 40;
+    //printfUart0("Pulse Width: %d\n", pulseWidth);
     WTIMER3_TAV_R = 0;
 
-    // Decode NEC protocol based on the pulseWidth and currentState
+    // Noise Filtering
+    if (pulseWidth < 100 || pulseWidth > 100000)
+    {
+        WTIMER3_ICR_R = TIMER_ICR_CAECINT;
+        return;
+    }
+
+    // Decode NEC protocol
     switch(currentState)
     {
         case NEC_IDLE:
-            if(pulseWidth >= 9000 && pulseWidth <= 9100) // Roughly check for 9ms
+            if(pulseWidth >= 3000 && pulseWidth <= 10000)
+            {
+                //printfUart0("Entered NEC_START\n");
                 currentState = NEC_START;
+            }
             break;
 
         case NEC_START:
-            if(pulseWidth >= 4500 && pulseWidth <= 4600) // Roughly check for 4.5ms
+            if(pulseWidth >= 500 && pulseWidth <= 5000)
             {
+                //printfUart0("Transitioning to NEC_DATA\n");
                 currentState = NEC_DATA;
                 data = 0;
                 bitCount = 0;
@@ -191,35 +166,57 @@ void IRdecoder(void)
             break;
 
         case NEC_DATA:
-            if(pulseWidth >= 500 && pulseWidth <= 600) // Roughly check for 562.5µs
-            {
-                data <<= 1; // Shift data left
-                bitCount++;
-            }
-            else if(pulseWidth >= 1600 && pulseWidth <= 1700) // Roughly check for 1.6875ms
+            if(pulseWidth >= 400 && pulseWidth <= 1200) // '0'
             {
                 data <<= 1;
-                data |= 1; // Set the least significant bit
                 bitCount++;
+                //printfUart0("Detected '0'\n");
+            }
+            else if(pulseWidth >= 1200 && pulseWidth <= 3050) // Adjusted tolerance for '1'
+            {
+                data <<= 1;
+                data |= 1;
+                bitCount++;
+                //printfUart0("Detected '1'\n");
+            }
+            else if (pulseWidth >= 2800) // Handle longer pulses separately
+            {
+                //printfUart0("Long pulse detected\n");
+            }
+            else
+            {
+                currentState = NEC_IDLE;
+                printfUart0("Unexpected pulse, resetting...\n");
+                return;
             }
 
             if(bitCount == 32)
             {
-                // Here, the variable 'data' has the 32-bit NEC data
-                printfUart0("Decoded Data: %x\n", data);
+                printfUart0("Decoded Data: %u\n", data);
                 currentState = NEC_IDLE;
             }
             break;
     }
 
-    WTIMER3_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
+    WTIMER3_ICR_R = TIMER_ICR_CAECINT;
 }
+
 
 void wideTimer3Isr()
 {
     togglePinValue(GREEN_LED);
     IRdecoder();
 }
+
+/*
+void wideTimer3Isr()
+{
+    pulseWidth = WTIMER3_TAV_R / 40; // Convert to microseconds
+    printfUart0("Pulse Width: %d\n", pulseWidth);
+    WTIMER3_TAV_R = 0;
+    WTIMER3_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
+}
+*/
 
 //-----------------------------------------------------------------------------
 // Main
@@ -242,14 +239,6 @@ int main(void)
 
     printfUart0("\n\nInitialization Success\n\n");
 
-    //selectPinInterruptLowLevel(TIMER_IN_IR); // maybe ?
-    //selectPinInterruptBothEdges(TIMER_IN_IR); // maybe
-    //enablePinInterrupt(TIMER_IN_IR);
-    //clearPinInterrupt(TIMER_IN_IR);
-    //enableTimerMode();
-    //enableNvicInterrupt(INT_GPIOD);
-    //enableTimerMode();
-
     //setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
     //setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
     //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
@@ -262,8 +251,6 @@ int main(void)
     //setPwmDutyCycle(1, 0, 760); // Right Wheel moves forward   // Lowest value = 760
     //setPwmDutyCycle(0, 0, 740); // Left wheel moves backwards  // Lowest value = 740
     //setPwmDutyCycle(1, 750, 0); // Right wheel moves backwards // Lowest value = 750
-
-    //printfUart0("\nInitialization Success\n\n");
 
     uint32_t testing = 10;
 
@@ -285,16 +272,3 @@ int main(void)
 //        }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
