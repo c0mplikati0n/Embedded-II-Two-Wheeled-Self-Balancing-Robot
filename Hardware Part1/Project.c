@@ -50,7 +50,7 @@
 //-----------------------------------------------------------------------------
 
 uint32_t lastTime = 0; // Last captured time
-uint32_t pulseWidth;
+uint32_t pulseWidth = 0;
 
 typedef enum
 {
@@ -59,15 +59,43 @@ typedef enum
     NEC_DATA
 } NEC_State;
 
+typedef enum {
+    NONE = 0,
+    FORWARD_FAST   = 16722135,
+    FORWARD_NORMAL = 16754775,
+    FORWARD_SLOW   = 16738455,
+    BACK_FAST      = 16713975,
+    BACK_NORMAL    = 16746615,
+    BACK_SLOW      = 16730295,
+    ROTATE_LEFT    = 16771095,
+    ROTATE_RIGHT   = 16762935
+    // Add other buttons
+} ButtonAction;
+
+typedef enum
+{
+    BUTTON_RELEASED,
+    BUTTON_PRESSED,
+    BUTTON_HELD
+} ButtonState;
+
+ButtonAction currentButtonAction = NONE;
+ButtonState currentButtonState = BUTTON_RELEASED;
 NEC_State currentState = NEC_IDLE;
+
 uint32_t data = 0; // Stores the decoded data
 uint8_t bitCount = 0; // Bit counter for the 32-bits of data
+
+uint32_t lastDecodedData = 0; // Stores the last valid decoded data
+
+uint32_t noSignalCounter = 0;
 
 //-----------------------------------------------------------------------------
 // Subroutines
 //-----------------------------------------------------------------------------
 
-
+void processDecodedData(uint32_t data);
+void handleButtonAction(void);
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -77,7 +105,7 @@ void initHw(void)
 {
     // Initialize system clock to 40 MHz
     initSystemClockTo40Mhz();
-    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R0 | SYSCTL_RCGCTIMER_R1 | SYSCTL_RCGCTIMER_R2 | SYSCTL_RCGCTIMER_R3; // Enable clock for Timer 2
+    SYSCTL_RCGCTIMER_R  |= SYSCTL_RCGCTIMER_R0  | SYSCTL_RCGCTIMER_R1  | SYSCTL_RCGCTIMER_R2  | SYSCTL_RCGCTIMER_R3;
     SYSCTL_RCGCWTIMER_R |= SYSCTL_RCGCWTIMER_R0 | SYSCTL_RCGCWTIMER_R1 | SYSCTL_RCGCWTIMER_R2 | SYSCTL_RCGCWTIMER_R3;
     _delay_cycles(3);
 
@@ -132,12 +160,19 @@ void IRdecoder(void) //fine tweak still
 {
     // Calculate the pulse width in microseconds
     pulseWidth = WTIMER3_TAV_R / 40;
-    //printfUart0("Pulse Width: %d\n", pulseWidth);
+    //printfUart0("Pulse Width: %u\n", pulseWidth);
     WTIMER3_TAV_R = 0;
 
-    // Noise Filtering
-    if (pulseWidth < 100 || pulseWidth > 100000)
+    // Check for repeated signal pattern for button held down
+    if (pulseWidth >= 95000 && pulseWidth <= 150000)
     {
+        noSignalCounter = 0;
+        currentButtonState = BUTTON_HELD;
+        processDecodedData(lastDecodedData);
+        WTIMER3_ICR_R = TIMER_ICR_CAECINT;
+        return;
+    } else if (pulseWidth >= 2000 && pulseWidth <= 3000) {
+        // This is part of the repeated signal
         WTIMER3_ICR_R = TIMER_ICR_CAECINT;
         return;
     }
@@ -146,15 +181,15 @@ void IRdecoder(void) //fine tweak still
     switch(currentState)
     {
         case NEC_IDLE:
-            if(pulseWidth >= 3000 && pulseWidth <= 10000)
+            if(pulseWidth >= 1000 && pulseWidth <= 10000)
             {
                 //printfUart0("Entered NEC_START\n");
                 currentState = NEC_START;
             }
-            break;
+        break;
 
         case NEC_START:
-            if(pulseWidth >= 500 && pulseWidth <= 5000)
+            if(pulseWidth >= 200 && pulseWidth <= 5000) // Unsure
             {
                 //printfUart0("Transitioning to NEC_DATA\n");
                 currentState = NEC_DATA;
@@ -163,10 +198,10 @@ void IRdecoder(void) //fine tweak still
             }
             else
                 currentState = NEC_IDLE;
-            break;
+        break;
 
         case NEC_DATA:
-            if(pulseWidth >= 400 && pulseWidth <= 1200) // '0'
+            if(pulseWidth >= 1 && pulseWidth <= 1200) // '0'
             {
                 data <<= 1;
                 bitCount++;
@@ -179,44 +214,85 @@ void IRdecoder(void) //fine tweak still
                 bitCount++;
                 //printfUart0("Detected '1'\n");
             }
-            else if (pulseWidth >= 2800) // Handle longer pulses separately
-            {
-                //printfUart0("Long pulse detected\n");
-            }
             else
             {
                 currentState = NEC_IDLE;
-                printfUart0("Unexpected pulse, resetting...\n");
+                //printfUart0("Unexpected pulse, resetting...\n");
                 return;
             }
 
-            if(bitCount == 32)
+            if(bitCount == 31)
             {
                 printfUart0("Decoded Data: %u\n", data);
+                lastDecodedData = data;
+                processDecodedData(data);
                 currentState = NEC_IDLE;
+                currentButtonState = BUTTON_PRESSED;
             }
-            break;
+        break;
     }
-
     WTIMER3_ICR_R = TIMER_ICR_CAECINT;
 }
-
 
 void wideTimer3Isr()
 {
     togglePinValue(GREEN_LED);
     IRdecoder();
+    //printfUart0("Bit Count:   %u\n", bitCount);
 }
 
-/*
-void wideTimer3Isr()
+void processDecodedData(uint32_t data)
 {
-    pulseWidth = WTIMER3_TAV_R / 40; // Convert to microseconds
-    printfUart0("Pulse Width: %d\n", pulseWidth);
-    WTIMER3_TAV_R = 0;
-    WTIMER3_ICR_R = TIMER_ICR_CAECINT; // Clear the interrupt
+    switch(data)
+    {
+        case FORWARD_FAST:
+            currentButtonAction = FORWARD_FAST;
+        break;
+        case FORWARD_NORMAL:
+            currentButtonAction = FORWARD_NORMAL;
+        break;
+        case FORWARD_SLOW:
+            currentButtonAction = FORWARD_SLOW;
+        break;
+        case BACK_FAST:
+            currentButtonAction = BACK_FAST;
+        break;
+        case BACK_NORMAL:
+            currentButtonAction = BACK_NORMAL;
+        break;
+        case BACK_SLOW:
+            currentButtonAction = BACK_SLOW;
+        break;
+        // Handle other buttons similarly when you have their decoded data
+        default:
+            currentButtonAction = NONE;
+    }
 }
-*/
+
+// This is what is called from main
+void handleButtonAction(void)
+{
+    switch(currentButtonAction)
+    {
+        case NONE:
+            // We aint doin nothin brub
+        break;
+
+        case FORWARD_FAST:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                //setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                //turnOffAll();
+            }
+        break;
+
+        default:
+            break;
+    }
+}
 
 //-----------------------------------------------------------------------------
 // Main
@@ -256,19 +332,16 @@ int main(void)
 
     while (true)
     {
-        //do nothing?
-        //printfUart0("\n Success\n");
-        //printfUart0("Edge Count: %d\n", edgeCount);
-        //printfUart0("Time Elapsed: %d\n", timeElapsed);
-//        waitMicrosecond(testing);
-//        timeElapsed = WTIMER3_TAV_R;                    // read counter input
-//        printfUart0("Time Elapsed: %d\n", timeElapsed);
-//        WTIMER3_TAV_R = 0;                              // zero counter for next edge
-//        testing++;
-//
-//        if(testing>1000)
-//        {
-//            testing = 1;
-//        }
+        /*
+        noSignalCounter++;
+        if (noSignalCounter > 1000000)  // This threshold needs to be adjusted based on experimentation
+        {
+            printfUart0("\n\nBUTTON RELEASED\n\n");
+            currentButtonState = BUTTON_RELEASED;
+            noSignalCounter = 0;  // Reset the counter
+        }
+        */
+
+        handleButtonAction();
     }
 }
