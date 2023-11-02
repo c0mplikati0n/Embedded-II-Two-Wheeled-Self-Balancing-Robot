@@ -1,6 +1,10 @@
 // Motor Library
 // Xavier
 
+// Implementing Motor and IR Sensor
+// Xavier A. Portillo-Catalan
+// UTA ID: 1001779115
+
 //-----------------------------------------------------------------------------
 // Hardware Target
 //-----------------------------------------------------------------------------
@@ -27,6 +31,25 @@
 //-----------------------------------------------------------------------------
 // Global variables
 //-----------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------
+// Motor Data
+//-----------------------------------------------------------------------------
+
+    //setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
+    //setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
+    //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
+    //setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
+
+    //setDirection(0, 0, 1000, 1000, 0); // Both wheels go backwards
+    //setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
+
+    //setPwmDutyCycle(0, 750, 0); // Left wheel moves forward    // Lowest value = 750
+    //setPwmDutyCycle(1, 0, 760); // Right Wheel moves forward   // Lowest value = 760
+    //setPwmDutyCycle(0, 0, 740); // Left wheel moves backwards  // Lowest value = 740
+    //setPwmDutyCycle(1, 750, 0); // Right wheel moves backwards // Lowest value = 750
 
 //-----------------------------------------------------------------------------
 // Subroutines

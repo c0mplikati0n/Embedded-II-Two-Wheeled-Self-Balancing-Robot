@@ -64,11 +64,18 @@ typedef enum {
     FORWARD_FAST   = 16722135,
     FORWARD_NORMAL = 16754775,
     FORWARD_SLOW   = 16738455,
+
     BACK_FAST      = 16713975,
     BACK_NORMAL    = 16746615,
     BACK_SLOW      = 16730295,
-    ROTATE_LEFT    = 16771095,
-    ROTATE_RIGHT   = 16762935
+
+    ROTATE_LEFT_B  = 16734375,
+    ROTATE_LEFT_F  = 16742535,
+    ROTATE_RIGHT_B = 16767015,
+    ROTATE_RIGHT_F = 16775175,
+
+    SPINNING_BOI_1 = 16718565,
+    SPINNING_BOI_2 = 16751205
     // Add other buttons
 } ButtonAction;
 
@@ -164,17 +171,20 @@ void IRdecoder(void) //fine tweak still
     WTIMER3_TAV_R = 0;
 
     // Check for repeated signal pattern for button held down
-    if (pulseWidth >= 95000 && pulseWidth <= 150000)
+    if ((currentButtonState == BUTTON_PRESSED) || (currentButtonState == BUTTON_HELD))
     {
-        noSignalCounter = 0;
-        currentButtonState = BUTTON_HELD;
-        processDecodedData(lastDecodedData);
-        WTIMER3_ICR_R = TIMER_ICR_CAECINT;
-        return;
-    } else if (pulseWidth >= 2000 && pulseWidth <= 3000) {
-        // This is part of the repeated signal
-        WTIMER3_ICR_R = TIMER_ICR_CAECINT;
-        return;
+        if (pulseWidth >= 95000 && pulseWidth <= 150000)
+        {
+            noSignalCounter = 0;
+            currentButtonState = BUTTON_HELD;
+            processDecodedData(lastDecodedData);
+            WTIMER3_ICR_R = TIMER_ICR_CAECINT;
+            return;
+        } else if (pulseWidth >= 2000 && pulseWidth <= 3000) {
+            // This is part of the repeated signal
+            WTIMER3_ICR_R = TIMER_ICR_CAECINT;
+            return;
+        }
     }
 
     // Decode NEC protocol
@@ -183,7 +193,6 @@ void IRdecoder(void) //fine tweak still
         case NEC_IDLE:
             if(pulseWidth >= 1000 && pulseWidth <= 10000)
             {
-                //printfUart0("Entered NEC_START\n");
                 currentState = NEC_START;
             }
         break;
@@ -191,7 +200,6 @@ void IRdecoder(void) //fine tweak still
         case NEC_START:
             if(pulseWidth >= 200 && pulseWidth <= 5000) // Unsure
             {
-                //printfUart0("Transitioning to NEC_DATA\n");
                 currentState = NEC_DATA;
                 data = 0;
                 bitCount = 0;
@@ -205,19 +213,16 @@ void IRdecoder(void) //fine tweak still
             {
                 data <<= 1;
                 bitCount++;
-                //printfUart0("Detected '0'\n");
             }
             else if(pulseWidth >= 1200 && pulseWidth <= 3050) // Adjusted tolerance for '1'
             {
                 data <<= 1;
                 data |= 1;
                 bitCount++;
-                //printfUart0("Detected '1'\n");
             }
             else
             {
                 currentState = NEC_IDLE;
-                //printfUart0("Unexpected pulse, resetting...\n");
                 return;
             }
 
@@ -234,12 +239,14 @@ void IRdecoder(void) //fine tweak still
     WTIMER3_ICR_R = TIMER_ICR_CAECINT;
 }
 
+//*
 void wideTimer3Isr()
 {
     togglePinValue(GREEN_LED);
     IRdecoder();
     //printfUart0("Bit Count:   %u\n", bitCount);
 }
+//*/
 
 void processDecodedData(uint32_t data)
 {
@@ -254,6 +261,7 @@ void processDecodedData(uint32_t data)
         case FORWARD_SLOW:
             currentButtonAction = FORWARD_SLOW;
         break;
+
         case BACK_FAST:
             currentButtonAction = BACK_FAST;
         break;
@@ -262,6 +270,27 @@ void processDecodedData(uint32_t data)
         break;
         case BACK_SLOW:
             currentButtonAction = BACK_SLOW;
+        break;
+
+        case ROTATE_LEFT_B:
+            currentButtonAction = ROTATE_LEFT_B;
+        break;
+        case ROTATE_LEFT_F:
+            currentButtonAction = ROTATE_LEFT_F;
+        break;
+
+        case ROTATE_RIGHT_B:
+            currentButtonAction = ROTATE_RIGHT_B;
+        break;
+        case ROTATE_RIGHT_F:
+            currentButtonAction = ROTATE_RIGHT_F;
+        break;
+
+        case SPINNING_BOI_1:
+            currentButtonAction = SPINNING_BOI_1;
+        break;
+        case SPINNING_BOI_2:
+            currentButtonAction = SPINNING_BOI_2;
         break;
         // Handle other buttons similarly when you have their decoded data
         default:
@@ -281,16 +310,132 @@ void handleButtonAction(void)
         case FORWARD_FAST:
             if (currentButtonState == BUTTON_HELD)
             {
-                //setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
+                setDirection(1, 1023, 0, 0, 1023); // Both wheels go forwards
+                //printfUart0("\nFORWARD_FAST\n");
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
-                //turnOffAll();
+                turnOffAll();
+                //printfUart0("\nOFF\n");
+            }
+        break;
+        case FORWARD_NORMAL:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(1, 900, 0, 0, 900); // Both wheels go forwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case FORWARD_SLOW:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(1, 800, 0, 0, 800); // Both wheels go forwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+
+        case BACK_FAST:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(0, 0, 1023, 1023, 0); // Both wheels go backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case BACK_NORMAL:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(0, 0, 900, 900, 0); // Both wheels go backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case BACK_SLOW:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(0, 0, 790, 790, 0); // Both wheels go backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+
+        case ROTATE_LEFT_B:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case ROTATE_LEFT_F:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case ROTATE_RIGHT_B:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case ROTATE_RIGHT_F:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+
+        case SPINNING_BOI_1:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(0, 0, 1023, 0, 1023); // Both wheels go backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
+            }
+        break;
+        case SPINNING_BOI_2:
+            if (currentButtonState == BUTTON_HELD)
+            {
+                setDirection(0, 1023, 0, 1023, 0); // Both wheels go backwards
+            }
+            else if (currentButtonState == BUTTON_RELEASED)
+            {
+                turnOffAll();
             }
         break;
 
         default:
-            break;
+            turnOffAll();
+        break;
     }
 }
 
@@ -315,32 +460,14 @@ int main(void)
 
     printfUart0("\n\nInitialization Success\n\n");
 
-    //setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
-    //setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
-    //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
-    //setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
-
-    //setDirection(0, 0, 1000, 1000, 0); // Both wheels go backwards
-    //setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
-
-    //setPwmDutyCycle(0, 750, 0); // Left wheel moves forward    // Lowest value = 750
-    //setPwmDutyCycle(1, 0, 760); // Right Wheel moves forward   // Lowest value = 760
-    //setPwmDutyCycle(0, 0, 740); // Left wheel moves backwards  // Lowest value = 740
-    //setPwmDutyCycle(1, 750, 0); // Right wheel moves backwards // Lowest value = 750
-
-    uint32_t testing = 10;
+    //uint32_t testing = 10;
 
     while (true)
     {
-        /*
-        noSignalCounter++;
-        if (noSignalCounter > 1000000)  // This threshold needs to be adjusted based on experimentation
+        if((WTIMER3_TAV_R / 40) > 200000)
         {
-            printfUart0("\n\nBUTTON RELEASED\n\n");
             currentButtonState = BUTTON_RELEASED;
-            noSignalCounter = 0;  // Reset the counter
         }
-        */
 
         handleButtonAction();
     }
