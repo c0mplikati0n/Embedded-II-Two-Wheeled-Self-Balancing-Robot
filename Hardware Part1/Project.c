@@ -313,18 +313,18 @@ void handleButtonAction(void)
         case FORWARD_FAST:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(1, 1023, 0, 0, 1023); // Both wheels go forwards
+                setDirection(1, 1023, 1023); // Both wheels go forwards
                 //printfUart0("\nFORWARD_FAST\n");
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
-                setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
+                setDirection(1, 1000, 1000); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 950, 0, 0, 950); // Both wheels go forwards
+                setDirection(1, 950, 950); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 850, 0, 0, 850); // Both wheels go forwards
+                setDirection(1, 850, 850); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 800, 0, 0, 800); // Both wheels go forwards
+                setDirection(1, 800, 800); // Both wheels go forwards
                 waitMicrosecond(100000);
                 turnOffAll();
                 //printfUart0("\nOFF\n");
@@ -333,9 +333,9 @@ void handleButtonAction(void)
         case FORWARD_NORMAL:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(1, 1023, 0, 0, 1023); // Both wheels go forwards
+                setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 900, 0, 0, 900); // Both wheels go forwards
+                setDirection(1, 900, 900); // Both wheels go forwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
@@ -345,9 +345,9 @@ void handleButtonAction(void)
         case FORWARD_SLOW:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(1, 1023, 0, 0, 1023); // Both wheels go forwards
+                setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 800, 0, 0, 800); // Both wheels go forwards
+                setDirection(1, 800, 800); // Both wheels go forwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
@@ -358,26 +358,26 @@ void handleButtonAction(void)
         case BACK_FAST:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(0, 0, 1023, 1023, 0); // Both wheels go backwards
+                setDirection(0, 1023, 1023); // Both wheels go backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
-                setDirection(0, 0, 1000, 1000, 0); // Both wheels go forwards
+                setDirection(0, 1000, 1000); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(0, 0, 950, 950, 0); // Both wheels go forwards
+                setDirection(0, 950, 950); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(0, 0, 850, 850, 0); // Both wheels go forwards
+                setDirection(0, 850, 850); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(0, 0, 800, 800, 0); // Both wheels go forwards
+                setDirection(0, 800, 800); // Both wheels go forwards
                 turnOffAll();
             }
         break;
         case BACK_NORMAL:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(0, 0, 1023, 1023, 0); // Both wheels go backwards
+                setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
-                setDirection(0, 0, 900, 900, 0); // Both wheels go backwards
+                setDirection(0, 900, 900); // Both wheels go backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
@@ -387,9 +387,9 @@ void handleButtonAction(void)
         case BACK_SLOW:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(0, 0, 1023, 1023, 0); // Both wheels go backwards
+                setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
-                setDirection(0, 0, 790, 790, 0); // Both wheels go backwards
+                setDirection(0, 790, 790); // Both wheels go backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
@@ -449,7 +449,9 @@ void handleButtonAction(void)
         case SPINNING_BOI_1:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(0, 0, 1023, 0, 1023); // Both wheels go backwards
+                //setPwmDutyCycle(0, 0, 1023);
+                //setPwmDutyCycle(1, 0, 1023);
+                setDirectionOld(0, 0, 1023, 0, 1023);
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
@@ -459,7 +461,9 @@ void handleButtonAction(void)
         case SPINNING_BOI_2:
             if (currentButtonState == BUTTON_HELD)
             {
-                setDirection(0, 1023, 0, 1023, 0); // Both wheels go backwards
+                //setPwmDutyCycle(0, 1023, 0);
+                //setPwmDutyCycle(1, 1023, 0);
+                setDirectionOld(0, 1023, 0, 1023, 0);
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
