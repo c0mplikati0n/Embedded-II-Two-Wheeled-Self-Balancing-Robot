@@ -1,10 +1,6 @@
 // Motor Library
 // Xavier
 
-// Implementing Motor and IR Sensor
-// Xavier A. Portillo-Catalan
-// UTA ID: 1001779115
-
 //-----------------------------------------------------------------------------
 // Hardware Target
 //-----------------------------------------------------------------------------
@@ -124,6 +120,25 @@ void setDirection(uint8_t side, uint16_t pwmAL, uint16_t pwmBL, uint16_t pwmAR, 
             PWM0_0_CMPB_R = pwmBL;
             PWM0_3_CMPA_R = pwmAR;
             PWM0_3_CMPB_R = pwmBR;
+            break;
+    }
+}
+
+void setDirectionNew(uint8_t direction, uint16_t pwmL, uint16_t pwmR)
+{
+    switch(direction)
+    {
+        case 0: // Backwards
+            PWM0_0_CMPA_R = 0;
+            PWM0_0_CMPB_R = pwmL;
+            PWM0_3_CMPA_R = pwmR;
+            PWM0_3_CMPB_R = 0;
+            break;
+        case 1: // Forward
+            PWM0_0_CMPA_R = pwmL;
+            PWM0_0_CMPB_R = 0;
+            PWM0_3_CMPA_R = 0;
+            PWM0_3_CMPB_R = pwmR;
             break;
     }
 }

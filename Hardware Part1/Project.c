@@ -1,3 +1,6 @@
+// Implementing Motor and IR Sensor
+// Xavier A. Portillo-Catalan
+// UTA ID: 1001779115
 
 //-----------------------------------------------------------------------------
 // Hardware Target
@@ -315,6 +318,14 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
+                setDirection(1, 1000, 0, 0, 1000); // Both wheels go forwards
+                waitMicrosecond(100000);
+                setDirection(1, 950, 0, 0, 950); // Both wheels go forwards
+                waitMicrosecond(100000);
+                setDirection(1, 850, 0, 0, 850); // Both wheels go forwards
+                waitMicrosecond(100000);
+                setDirection(1, 800, 0, 0, 800); // Both wheels go forwards
+                waitMicrosecond(100000);
                 turnOffAll();
                 //printfUart0("\nOFF\n");
             }
@@ -322,6 +333,8 @@ void handleButtonAction(void)
         case FORWARD_NORMAL:
             if (currentButtonState == BUTTON_HELD)
             {
+                setDirection(1, 1023, 0, 0, 1023); // Both wheels go forwards
+                waitMicrosecond(100000);
                 setDirection(1, 900, 0, 0, 900); // Both wheels go forwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -332,6 +345,8 @@ void handleButtonAction(void)
         case FORWARD_SLOW:
             if (currentButtonState == BUTTON_HELD)
             {
+                setDirection(1, 1023, 0, 0, 1023); // Both wheels go forwards
+                waitMicrosecond(100000);
                 setDirection(1, 800, 0, 0, 800); // Both wheels go forwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -347,12 +362,21 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED)
             {
+                setDirection(0, 0, 1000, 1000, 0); // Both wheels go forwards
+                waitMicrosecond(100000);
+                setDirection(0, 0, 950, 950, 0); // Both wheels go forwards
+                waitMicrosecond(100000);
+                setDirection(0, 0, 850, 850, 0); // Both wheels go forwards
+                waitMicrosecond(100000);
+                setDirection(0, 0, 800, 800, 0); // Both wheels go forwards
                 turnOffAll();
             }
         break;
         case BACK_NORMAL:
             if (currentButtonState == BUTTON_HELD)
             {
+                setDirection(0, 0, 1023, 1023, 0); // Both wheels go backwards
+                waitMicrosecond(100000);
                 setDirection(0, 0, 900, 900, 0); // Both wheels go backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -363,6 +387,8 @@ void handleButtonAction(void)
         case BACK_SLOW:
             if (currentButtonState == BUTTON_HELD)
             {
+                setDirection(0, 0, 1023, 1023, 0); // Both wheels go backwards
+                waitMicrosecond(100000);
                 setDirection(0, 0, 790, 790, 0); // Both wheels go backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -374,6 +400,8 @@ void handleButtonAction(void)
         case ROTATE_LEFT_B:
             if (currentButtonState == BUTTON_HELD)
             {
+                setPwmDutyCycle(0, 0, 1023); // Left wheel moves backwards
+                waitMicrosecond(100000);
                 setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -384,6 +412,8 @@ void handleButtonAction(void)
         case ROTATE_LEFT_F:
             if (currentButtonState == BUTTON_HELD)
             {
+                setPwmDutyCycle(0, 1023, 0); // Left wheel moves forward
+                waitMicrosecond(100000);
                 setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -394,6 +424,8 @@ void handleButtonAction(void)
         case ROTATE_RIGHT_B:
             if (currentButtonState == BUTTON_HELD)
             {
+                setPwmDutyCycle(1, 1023, 0); // Right wheel moves backwards
+                waitMicrosecond(100000);
                 setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
             }
             else if (currentButtonState == BUTTON_RELEASED)
@@ -404,6 +436,8 @@ void handleButtonAction(void)
         case ROTATE_RIGHT_F:
             if (currentButtonState == BUTTON_HELD)
             {
+                setPwmDutyCycle(1, 0, 1023); // Right Wheel moves forward
+                waitMicrosecond(100000);
                 setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
             }
             else if (currentButtonState == BUTTON_RELEASED)
