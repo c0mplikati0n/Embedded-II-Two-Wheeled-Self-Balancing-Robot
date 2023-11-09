@@ -100,6 +100,10 @@ uint32_t lastDecodedData = 0; // Stores the last valid decoded data
 
 uint32_t noSignalCounter = 0;
 
+bool actionHeldExecuted = false;
+bool actionReleasedExecuted = false;
+
+
 //-----------------------------------------------------------------------------
 // Subroutines
 //-----------------------------------------------------------------------------
@@ -236,6 +240,9 @@ void IRdecoder(void) //fine tweak still
                 processDecodedData(data);
                 currentState = NEC_IDLE;
                 currentButtonState = BUTTON_PRESSED;
+
+                actionHeldExecuted = false;
+                actionReleasedExecuted = false;
             }
         break;
     }
@@ -308,15 +315,19 @@ void handleButtonAction(void)
     {
         case NONE:
             // We aint doin nothin brub
+            actionHeldExecuted = false;
+            actionReleasedExecuted = false;
         break;
 
         case FORWARD_FAST:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 //printfUart0("\nFORWARD_FAST\n");
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 setDirection(1, 1000, 1000); // Both wheels go forwards
                 waitMicrosecond(100000);
@@ -328,39 +339,51 @@ void handleButtonAction(void)
                 waitMicrosecond(100000);
                 turnOffAll();
                 //printfUart0("\nOFF\n");
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case FORWARD_NORMAL:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
                 setDirection(1, 900, 900); // Both wheels go forwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case FORWARD_SLOW:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 800, 800); // Both wheels go forwards
+                setDirection(1, 850, 850); // Both wheels go forwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
 
         case BACK_FAST:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(0, 1023, 1023); // Both wheels go backwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 setDirection(0, 1000, 1000); // Both wheels go forwards
                 waitMicrosecond(100000);
@@ -370,104 +393,138 @@ void handleButtonAction(void)
                 waitMicrosecond(100000);
                 setDirection(0, 800, 800); // Both wheels go forwards
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case BACK_NORMAL:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(0, 900, 900); // Both wheels go backwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case BACK_SLOW:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
-                setDirection(0, 790, 790); // Both wheels go backwards
+                setDirection(0, 850, 850); // Both wheels go backwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
 
         case ROTATE_LEFT_B:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setPwmDutyCycle(0, 0, 1023); // Left wheel moves backwards
-                waitMicrosecond(100000);
-                setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
+                //waitMicrosecond(100000);
+                //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case ROTATE_LEFT_F:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setPwmDutyCycle(0, 1023, 0); // Left wheel moves forward
                 waitMicrosecond(100000);
                 setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case ROTATE_RIGHT_B:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setPwmDutyCycle(1, 1023, 0); // Right wheel moves backwards
                 waitMicrosecond(100000);
                 setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case ROTATE_RIGHT_F:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setPwmDutyCycle(1, 0, 1023); // Right Wheel moves forward
                 waitMicrosecond(100000);
                 setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
 
         case SPINNING_BOI_1:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 //setPwmDutyCycle(0, 0, 1023);
                 //setPwmDutyCycle(1, 0, 1023);
                 setDirectionOld(0, 0, 1023, 0, 1023);
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
         case SPINNING_BOI_2:
-            if (currentButtonState == BUTTON_HELD)
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 //setPwmDutyCycle(0, 1023, 0);
                 //setPwmDutyCycle(1, 1023, 0);
                 setDirectionOld(0, 1023, 0, 1023, 0);
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
             }
-            else if (currentButtonState == BUTTON_RELEASED)
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
             }
         break;
 
@@ -505,6 +562,9 @@ int main(void)
         if((WTIMER3_TAV_R / 40) > 200000)
         {
             currentButtonState = BUTTON_RELEASED;
+
+            //actionHeldExecuted = false;
+            //actionReleasedExecuted = false;
         }
 
         handleButtonAction();
