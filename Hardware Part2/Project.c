@@ -37,8 +37,8 @@
 #define OUT_PWM_3       PORTB, 6 // M0PWM0
 #define OUT_PWM_4       PORTB, 7 // M0PWM1
 
-#define TIMER_IN_L      PORTD, 6 // WT5CCP0
-#define TIMER_IN_R      PORTC, 6 // WT1CCP0
+#define TIMER_IN_L      PORTC, 6 // WT1CCP0
+#define TIMER_IN_R      PORTD, 6 // WT5CCP0
 
 #define TIMER_IN_IR     PORTD, 2 // WT3CCP0
 
@@ -158,6 +158,7 @@ void initHw(void)
 
 void enableTimerMode()
 {
+    // IR sensor // TSOP13438 38kHz AGC4
     WTIMER3_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
     WTIMER3_CFG_R = 4;                               // configure as 32-bit counter (A only)
     WTIMER3_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
@@ -166,6 +167,26 @@ void enableTimerMode()
     WTIMER3_TAV_R = 0;                               // zero counter for first period
     WTIMER3_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     NVIC_EN3_R |= 1 << (INT_WTIMER3A-16-96);         // turn-on interrupt 116 (WTIMER3A)
+
+    // Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
+    WTIMER1_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
+    WTIMER1_CFG_R = 4;                               // configure as 32-bit counter (A only)
+    WTIMER1_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
+    WTIMER1_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from positive edge to positive edge
+    WTIMER1_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
+    WTIMER1_TAV_R = 0;                               // zero counter for first period
+    WTIMER1_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
+    NVIC_EN3_R |= 1 << (INT_WTIMER1A-16-96);         // turn-on interrupt 112 (WTIMER1A)
+
+    // Right Wheel // OPB876N55 Optical Interrupter // PD6 // WT5CCP0
+    WTIMER5_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
+    WTIMER5_CFG_R = 4;                               // configure as 32-bit counter (A only)
+    WTIMER5_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
+    WTIMER5_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from positive edge to positive edge
+    WTIMER5_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
+    WTIMER5_TAV_R = 0;                               // zero counter for first period
+    WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
+    NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
 }
 
 volatile uint32_t timeElapsed = 0;  // global variable to store time
@@ -253,7 +274,7 @@ void IRdecoder(void) //fine tweak still
 //*
 void wideTimer3Isr()
 {
-    togglePinValue(GREEN_LED);
+    //togglePinValue(GREEN_LED);
     IRdecoder();
     //printfUart0("Bit Count:   %u\n", bitCount);
 }
@@ -435,8 +456,8 @@ void handleButtonAction(void)
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setPwmDutyCycle(0, 0, 1023); // Left wheel moves backwards
-                //waitMicrosecond(100000);
-                //setPwmDutyCycle(0, 0, 1000); // Left wheel moves backwards
+                waitMicrosecond(100000);
+                setPwmDutyCycle(0, 0, 850); // Left wheel moves backwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -452,7 +473,7 @@ void handleButtonAction(void)
             {
                 setPwmDutyCycle(0, 1023, 0); // Left wheel moves forward
                 waitMicrosecond(100000);
-                setPwmDutyCycle(0, 1000, 0); // Left wheel moves forward
+                setPwmDutyCycle(0, 850, 0); // Left wheel moves forward
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -468,7 +489,7 @@ void handleButtonAction(void)
             {
                 setPwmDutyCycle(1, 1023, 0); // Right wheel moves backwards
                 waitMicrosecond(100000);
-                setPwmDutyCycle(1, 1000, 0); // Right wheel moves backwards
+                setPwmDutyCycle(1, 850, 0); // Right wheel moves backwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -484,7 +505,7 @@ void handleButtonAction(void)
             {
                 setPwmDutyCycle(1, 0, 1023); // Right Wheel moves forward
                 waitMicrosecond(100000);
-                setPwmDutyCycle(1, 0, 1000); // Right Wheel moves forward
+                setPwmDutyCycle(1, 0, 850); // Right Wheel moves forward
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -499,9 +520,7 @@ void handleButtonAction(void)
         case SPINNING_BOI_1:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                //setPwmDutyCycle(0, 0, 1023);
-                //setPwmDutyCycle(1, 0, 1023);
-                setDirectionOld(0, 0, 1023, 0, 1023);
+                setDirectionOld(0, 0, 900, 0, 900);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -515,9 +534,7 @@ void handleButtonAction(void)
         case SPINNING_BOI_2:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                //setPwmDutyCycle(0, 1023, 0);
-                //setPwmDutyCycle(1, 1023, 0);
-                setDirectionOld(0, 1023, 0, 1023, 0);
+                setDirectionOld(0, 900, 0, 900, 0);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -532,6 +549,35 @@ void handleButtonAction(void)
         default:
             turnOffAll();
         break;
+    }
+}
+
+uint32_t leftWheelOpticalInterrupt = 0;
+uint32_t RightWheelOpticalInterrupt = 0;
+
+// Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
+void wideTimer1Isr()
+{
+    leftWheelOpticalInterrupt++;
+    printfUart0("left Wheel Optical Interrupt:  %d \n", leftWheelOpticalInterrupt);
+
+    if(RightWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
+    {
+        RightWheelOpticalInterrupt = 0;
+        printfUart0("left Wheel Full Rotation\n");
+    }
+}
+
+// Right Wheel // OPB876N55 Optical Interrupter // PD6 // WT5CCP0 // 1 tab detected = 1 cm
+void wideTimer5Isr()
+{
+    RightWheelOpticalInterrupt++;
+    printfUart0("Right Wheel Optical Interrupt: %d \n", RightWheelOpticalInterrupt);
+
+    if(RightWheelOpticalInterrupt == 40) // 40 tabs on wheel
+    {
+        RightWheelOpticalInterrupt = 0;
+        printfUart0("Right Wheel Full Rotation\n");
     }
 }
 
