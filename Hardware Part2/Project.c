@@ -566,6 +566,9 @@ void wideTimer1Isr()
         RightWheelOpticalInterrupt = 0;
         printfUart0("left Wheel Full Rotation\n");
     }
+
+
+    // 1m = 100cm = 2FullRotation + 20cm
 }
 
 // Right Wheel // OPB876N55 Optical Interrupter // PD6 // WT5CCP0 // 1 tab detected = 1 cm
@@ -578,6 +581,23 @@ void wideTimer5Isr()
     {
         RightWheelOpticalInterrupt = 0;
         printfUart0("Right Wheel Full Rotation\n");
+    }
+
+    // 1m = 100cm = 2FullRotation + 20cm
+}
+
+void goStraight()
+{
+    //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) < 2)
+    if (RightWheelOpticalInterrupt < LeftWheelOpticalInterrupt)
+    {
+[]\
+    }
+
+    //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) > 2)
+    if (RightWheelOpticalInterrupt > LeftWheelOpticalInterrupt)
+    {
+
     }
 }
 
@@ -620,6 +640,7 @@ int main(void)
         if((WTIMER3_TAV_R / 40) > 200000)
         {
             currentButtonState = BUTTON_RELEASED;
+            currentButtonAction = NONE
 
             //actionHeldExecuted = false;
             //actionReleasedExecuted = false;
