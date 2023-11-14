@@ -25,6 +25,7 @@
 #include "motorControl.h"
 #include "nvic.h"
 #include "i2c1.h"
+#include "irDecoder.h"
 
 // Pins
 //#define I2C1SCL         PORTA, 6 // I2C 1 SCL
@@ -55,40 +56,6 @@
 
 uint32_t lastTime = 0; // Last captured time
 uint32_t pulseWidth = 0;
-
-typedef enum
-{
-    NEC_IDLE,
-    NEC_START,
-    NEC_DATA
-} NEC_State;
-
-typedef enum {
-    NONE = 0,
-    FORWARD_FAST   = 16722135,
-    FORWARD_NORMAL = 16754775,
-    FORWARD_SLOW   = 16738455,
-
-    BACK_FAST      = 16713975,
-    BACK_NORMAL    = 16746615,
-    BACK_SLOW      = 16730295,
-
-    ROTATE_LEFT_B  = 16734375,
-    ROTATE_LEFT_F  = 16742535,
-    ROTATE_RIGHT_B = 16767015,
-    ROTATE_RIGHT_F = 16775175,
-
-    SPINNING_BOI_1 = 16718565,
-    SPINNING_BOI_2 = 16751205
-    // Add other buttons
-} ButtonAction;
-
-typedef enum
-{
-    BUTTON_RELEASED,
-    BUTTON_PRESSED,
-    BUTTON_HELD
-} ButtonState;
 
 ButtonAction currentButtonAction = NONE;
 ButtonState currentButtonState = BUTTON_RELEASED;
@@ -351,18 +318,13 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
-                setDirection(1, 1000, 1000); // Both wheels go forwards
-                waitMicrosecond(100000);
-                setDirection(1, 950, 950); // Both wheels go forwards
-                waitMicrosecond(100000);
-                setDirection(1, 850, 850); // Both wheels go forwards
-                waitMicrosecond(100000);
-                setDirection(1, 800, 800); // Both wheels go forwards
-                waitMicrosecond(100000);
+                slowDown(1, 1023, 1023);
                 turnOffAll();
                 //printfUart0("\nOFF\n");
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
+                //currentButtonState = BUTTON_RELEASED;
+                //currentButtonAction = NONE;
             }
         break;
         case FORWARD_NORMAL:
@@ -379,6 +341,8 @@ void handleButtonAction(void)
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
+                //currentButtonState = BUTTON_RELEASED;
+                                //currentButtonAction = NONE;
             }
         break;
         case FORWARD_SLOW:
@@ -395,6 +359,8 @@ void handleButtonAction(void)
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
+                //currentButtonState = BUTTON_RELEASED;
+                                //currentButtonAction = NONE;
             }
         break;
 
@@ -407,16 +373,13 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
-                setDirection(0, 1000, 1000); // Both wheels go forwards
-                waitMicrosecond(100000);
-                setDirection(0, 950, 950); // Both wheels go forwards
-                waitMicrosecond(100000);
-                setDirection(0, 850, 850); // Both wheels go forwards
-                waitMicrosecond(100000);
-                setDirection(0, 800, 800); // Both wheels go forwards
+                slowDown(0, 1023, 1023);
+
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
+                //currentButtonState = BUTTON_RELEASED;
+                                //currentButtonAction = NONE;
             }
         break;
         case BACK_NORMAL:
@@ -433,6 +396,8 @@ void handleButtonAction(void)
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
+                //currentButtonState = BUTTON_RELEASED;
+                                //currentButtonAction = NONE;
             }
         break;
         case BACK_SLOW:
@@ -449,6 +414,8 @@ void handleButtonAction(void)
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
+                //currentButtonState = BUTTON_RELEASED;
+                                //currentButtonAction = NONE;
             }
         break;
 
@@ -591,7 +558,7 @@ void goStraight()
     //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) < 2)
     if (RightWheelOpticalInterrupt < LeftWheelOpticalInterrupt)
     {
-[]\
+
     }
 
     //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) > 2)

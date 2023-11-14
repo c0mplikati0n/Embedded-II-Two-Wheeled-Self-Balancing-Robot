@@ -18,6 +18,7 @@
 #include "motorControl.h"
 #include "tm4c123gh6pm.h"
 #include "gpio.h"
+#include "wait.h"
 
 #define OUT_PWM_1       PORTC, 4 // M0PWM6
 #define OUT_PWM_2       PORTC, 5 // M0PWM7
@@ -140,6 +141,47 @@ void setDirection(uint8_t direction, uint16_t pwmL, uint16_t pwmR)
             PWM0_3_CMPA_R = 0;
             PWM0_3_CMPB_R = pwmR;
             break;
+    }
+}
+
+void slowDown(uint8_t direction, uint16_t pwmL, uint16_t pwmR)
+{
+    uint16_t pwmLval = pwmL;
+    uint16_t pwmRval = pwmR;
+
+    uint32_t microSeconds = 50000; // 100000
+
+    switch(direction)
+    {
+        case 0: // Backwards
+            while ((pwmLval > 200) && (pwmRval > 200))
+            {
+                pwmLval -= 50;
+                pwmRval -= 50;
+
+                PWM0_0_CMPA_R = 0;
+                PWM0_0_CMPB_R = pwmLval;
+                PWM0_3_CMPA_R = pwmRval;
+                PWM0_3_CMPB_R = 0;
+
+                waitMicrosecond(microSeconds);
+            }
+        break;
+
+        case 1: // Forward
+            while ((pwmLval > 200) && (pwmRval > 200))
+            {
+                pwmLval -= 50;
+                pwmRval -= 50;
+
+                PWM0_0_CMPA_R = pwmLval;
+                PWM0_0_CMPB_R = 0;
+                PWM0_3_CMPA_R = 0;
+                PWM0_3_CMPB_R = pwmRval;
+
+                waitMicrosecond(microSeconds);
+            }
+        break;
     }
 }
 
