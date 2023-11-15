@@ -57,9 +57,9 @@ extern uint32_t __STACK_TOP;
 // To be added by user
 //extern void wideTimer1Isr(void);
 extern void IRdecoder(void);
-extern void wideTimer3Isr(void);
-extern void wideTimer1Isr(void);
-extern void wideTimer5Isr(void);
+extern void wideTimer3Isr(void); // IR
+extern void wideTimer1Isr(void); // Left Wheel
+extern void wideTimer5Isr(void); // Right Wheel
 
 //*****************************************************************************
 //

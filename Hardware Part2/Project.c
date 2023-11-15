@@ -25,7 +25,7 @@
 #include "motorControl.h"
 #include "nvic.h"
 #include "i2c1.h"
-#include "irDecoder.h"
+//#include "irDecoder.h"
 
 // Pins
 //#define I2C1SCL         PORTA, 6 // I2C 1 SCL
@@ -53,6 +53,41 @@
 //-----------------------------------------------------------------------------
 // Global variables
 //-----------------------------------------------------------------------------
+
+typedef enum
+{
+    NEC_IDLE,
+    NEC_START,
+    NEC_DATA
+} NEC_State;
+
+typedef enum
+{
+    NONE = 0,
+    FORWARD_FAST   = 16722135,
+    FORWARD_NORMAL = 16754775,
+    FORWARD_SLOW   = 16738455,
+
+    BACK_FAST      = 16713975,
+    BACK_NORMAL    = 16746615,
+    BACK_SLOW      = 16730295,
+
+    ROTATE_LEFT_B  = 16734375,
+    ROTATE_LEFT_F  = 16742535,
+    ROTATE_RIGHT_B = 16767015,
+    ROTATE_RIGHT_F = 16775175,
+
+    SPINNING_BOI_1 = 16718565,
+    SPINNING_BOI_2 = 16751205
+    // Add other buttons
+} ButtonAction;
+
+typedef enum
+{
+    BUTTON_RELEASED,
+    BUTTON_PRESSED,
+    BUTTON_HELD
+} ButtonState;
 
 uint32_t lastTime = 0; // Last captured time
 uint32_t pulseWidth = 0;
@@ -88,7 +123,7 @@ void initHw(void)
     // Initialize system clock to 40 MHz
     initSystemClockTo40Mhz();
     SYSCTL_RCGCTIMER_R  |= SYSCTL_RCGCTIMER_R0  | SYSCTL_RCGCTIMER_R1  | SYSCTL_RCGCTIMER_R2  | SYSCTL_RCGCTIMER_R3;
-    SYSCTL_RCGCWTIMER_R |= SYSCTL_RCGCWTIMER_R0 | SYSCTL_RCGCWTIMER_R1 | SYSCTL_RCGCWTIMER_R2 | SYSCTL_RCGCWTIMER_R3;
+    SYSCTL_RCGCWTIMER_R |= SYSCTL_RCGCWTIMER_R0 | SYSCTL_RCGCWTIMER_R1 | SYSCTL_RCGCWTIMER_R2 | SYSCTL_RCGCWTIMER_R3 | SYSCTL_RCGCWTIMER_R4 | SYSCTL_RCGCWTIMER_R5;
     _delay_cycles(3);
 
     enablePort(PORTA);
@@ -241,7 +276,7 @@ void IRdecoder(void) //fine tweak still
 //*
 void wideTimer3Isr()
 {
-    //togglePinValue(GREEN_LED);
+    togglePinValue(GREEN_LED);
     IRdecoder();
     //printfUart0("Bit Count:   %u\n", bitCount);
 }
@@ -520,7 +555,7 @@ void handleButtonAction(void)
 }
 
 uint32_t leftWheelOpticalInterrupt = 0;
-uint32_t RightWheelOpticalInterrupt = 0;
+uint32_t rightWheelOpticalInterrupt = 0;
 
 // Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
 void wideTimer1Isr()
@@ -528,41 +563,43 @@ void wideTimer1Isr()
     leftWheelOpticalInterrupt++;
     printfUart0("left Wheel Optical Interrupt:  %d \n", leftWheelOpticalInterrupt);
 
-    if(RightWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
+    if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
     {
-        RightWheelOpticalInterrupt = 0;
+        rightWheelOpticalInterrupt = 0;
         printfUart0("left Wheel Full Rotation\n");
     }
 
 
     // 1m = 100cm = 2FullRotation + 20cm
+    WTIMER1_ICR_R = TIMER_ICR_CAECINT;           // clear interrupt flag
 }
 
 // Right Wheel // OPB876N55 Optical Interrupter // PD6 // WT5CCP0 // 1 tab detected = 1 cm
 void wideTimer5Isr()
 {
-    RightWheelOpticalInterrupt++;
-    printfUart0("Right Wheel Optical Interrupt: %d \n", RightWheelOpticalInterrupt);
+    rightWheelOpticalInterrupt++;
+    printfUart0("Right Wheel Optical Interrupt: %d \n", rightWheelOpticalInterrupt);
 
-    if(RightWheelOpticalInterrupt == 40) // 40 tabs on wheel
+    if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel
     {
-        RightWheelOpticalInterrupt = 0;
+        rightWheelOpticalInterrupt = 0;
         printfUart0("Right Wheel Full Rotation\n");
     }
 
     // 1m = 100cm = 2FullRotation + 20cm
+    WTIMER5_ICR_R = TIMER_ICR_CAECINT;
 }
 
 void goStraight()
 {
     //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) < 2)
-    if (RightWheelOpticalInterrupt < LeftWheelOpticalInterrupt)
+    if (rightWheelOpticalInterrupt < leftWheelOpticalInterrupt)
     {
 
     }
 
     //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) > 2)
-    if (RightWheelOpticalInterrupt > LeftWheelOpticalInterrupt)
+    if (rightWheelOpticalInterrupt > leftWheelOpticalInterrupt)
     {
 
     }
@@ -600,6 +637,21 @@ int main(void)
         }
     }
 
+
+
+    uint8_t config[2] = {0xD5, 0x80};
+
+    writeI2c1Registers(ADS1115, CONFIG_ADD, configure, 2);
+    waitMicrosecond(10000);
+
+    uint8_t y[2];
+    readI2c1Registers(ADS1115, CONVERSION_ADD, y, 2);
+    waitMicrosecond(10000);
+
+    int16_t m = (y[0] << 8 | y[1]);
+
+
+
     waitMicrosecond(1000000);
 
     while (true)
@@ -607,8 +659,9 @@ int main(void)
         if((WTIMER3_TAV_R / 40) > 200000)
         {
             currentButtonState = BUTTON_RELEASED;
-            currentButtonAction = NONE
+            //currentButtonAction = NONE; // this breaks the code
 
+            //printfUart0("Button Released\n");
             //actionHeldExecuted = false;
             //actionReleasedExecuted = false;
         }

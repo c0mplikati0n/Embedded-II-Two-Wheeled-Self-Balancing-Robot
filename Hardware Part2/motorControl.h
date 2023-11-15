@@ -29,7 +29,7 @@ void initPWM(void);
 void setPwmDutyCycle(uint8_t side, uint16_t pwmA, uint16_t pwmB);
 void setDirectionOld(uint8_t side, uint16_t pwmAL, uint16_t pwmBL, uint16_t pwmAR, uint16_t pwmBR);
 void setDirection(uint8_t direction, uint16_t pwmL, uint16_t pwmR);
-void slowDown(uint8_t direction, uint16_t pwmL, uint16_t pwmR)
+void slowDown(uint8_t direction, uint16_t pwmL, uint16_t pwmR);
 
 void turnOffAll(void);
 
