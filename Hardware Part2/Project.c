@@ -50,6 +50,8 @@
 #define PB_1            PORTF, 4
 #define PB_2            PORTF, 0
 
+#define MPU6050         0x68  // 110 1000 = 0x68 = ADDR is logic low
+
 //-----------------------------------------------------------------------------
 // Global variables
 //-----------------------------------------------------------------------------
@@ -625,8 +627,9 @@ int main(void)
     printfUart0("\n\nInitialization Success\n\n");
 
     initI2c1();
+
     // Verify we can see the MPU-6050 (6-dof IMU) // b110100X // 01101000 -> 0x68
-    bool confirmADDR = pollI2c1Address(0x68);
+    bool confirmADDR = pollI2c1Address(MPU6050);
     printfUart0("\n\nPolling I2C Address");
     if(confirmADDR)
     {
@@ -637,20 +640,15 @@ int main(void)
         }
     }
 
+    // START condition (S) on the bus, which is defined as a HIGH-to-LOW transition of the SDA line while SCL line is HIGH
+    //writeI2c1Data(MPU6050, 1);
+    //waitMicrosecond(10000);
 
+    // The bus is considered to be busy until the master puts
 
-    uint8_t config[2] = {0xD5, 0x80};
-
-    writeI2c1Registers(ADS1115, CONFIG_ADD, configure, 2);
-    waitMicrosecond(10000);
-
-    uint8_t y[2];
-    readI2c1Registers(ADS1115, CONVERSION_ADD, y, 2);
-    waitMicrosecond(10000);
-
-    int16_t m = (y[0] << 8 | y[1]);
-
-
+    // A STOP condition (P) on the bus is defined as a LOW to HIGH transition on the SDA line while SCL is HIGH
+    //writeI2c1Data(MPU6050, 0);
+    //waitMicrosecond(10000);
 
     waitMicrosecond(1000000);
 
@@ -667,5 +665,9 @@ int main(void)
         }
 
         handleButtonAction();
+
+        //uint8_t readMPU = readI2c1Data(MPU6050);
+        //printfUart0("Read Data =    %u\n", readMPU);
+        //waitMicrosecond(1000000);
     }
 }
