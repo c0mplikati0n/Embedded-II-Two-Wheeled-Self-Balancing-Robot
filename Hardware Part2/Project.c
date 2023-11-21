@@ -55,6 +55,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+void rotate(uint8_t degrees, bool direction);
 
 //-----------------------------------------------------------------------------
 // Global variables
@@ -82,6 +83,12 @@ typedef enum
     ROTATE_LEFT_F  = 16742535,
     ROTATE_RIGHT_B = 16767015,
     ROTATE_RIGHT_F = 16775175,
+
+    ROTATE_CW_90   = 16722645,
+    ROTATE_CW_180  = 16714485,
+
+    ROTATE_CCW_90  = 16755285,
+    ROTATE_CCW_180 = 16747125,
 
     SPINNING_BOI_1 = 16718565,
     SPINNING_BOI_2 = 16751205
@@ -369,6 +376,19 @@ void processDecodedData(uint32_t data)
             rightWheelSpeed = 850;
         break;
 
+        case ROTATE_CW_90:
+            currentButtonAction = ROTATE_CW_90;
+        break;
+        case ROTATE_CW_180:
+            currentButtonAction = ROTATE_CW_180;
+        break;
+        case ROTATE_CCW_90:
+            currentButtonAction = ROTATE_CCW_90;
+        break;
+        case ROTATE_CCW_180:
+            currentButtonAction = ROTATE_CCW_180;
+        break;
+
         case SPINNING_BOI_1:
             currentButtonAction = SPINNING_BOI_1;
             leftWheelSpeed = 900;
@@ -576,6 +596,63 @@ void handleButtonAction(void)
             }
         break;
 
+        case ROTATE_CW_90:
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
+            {
+                rotate(90, true);
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
+            }
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
+            {
+                turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
+            }
+        break;
+        case ROTATE_CW_180:
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
+            {
+                rotate(180, true);
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
+            }
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
+            {
+                turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
+            }
+        break;
+        case ROTATE_CCW_90:
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
+            {
+                rotate(90, false);
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
+            }
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
+            {
+                turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
+            }
+        break;
+        case ROTATE_CCW_180:
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
+            {
+                rotate(180, false);
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
+            }
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
+            {
+                turnOffAll();
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
+            }
+        break;
+
         case SPINNING_BOI_1:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
@@ -610,6 +687,23 @@ void handleButtonAction(void)
         break;
     }
 }
+
+void rotate(uint8_t degrees, bool direction)
+{
+    //uint32_t wheelRotationsNeeded = calculateRotationsForDegrees(degrees);
+    if(direction) //CW
+    {
+        //setWheelSpeed(leftWheel, wheelRotationsNeeded * wheelSpeedPerRotation);
+        //setWheelSpeed(rightWheel, -wheelRotationsNeeded * wheelSpeedPerRotation);
+    }
+    else // COUNTERCLOCKWISE
+    {
+        //setWheelSpeed(leftWheel, -wheelRotationsNeeded * wheelSpeedPerRotation);
+        //setWheelSpeed(rightWheel, wheelRotationsNeeded * wheelSpeedPerRotation);
+    }
+    //waitUntilRotationComplete(); // You need to implement this based on your sensors
+}
+
 
 uint32_t leftWheelOpticalInterrupt = 0;
 uint32_t rightWheelOpticalInterrupt = 0;
@@ -908,8 +1002,10 @@ int main(void)
 
         handleButtonAction();
 
+
         //uint8_t readMPU = readI2c1Data(MPU6050);
         readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
+        /*
         printfUart0("Read Data ax =    %d\n", ax);
         printfUart0("Read Data ay =    %d\n", ay);
         printfUart0("Read Data az =    %d\n", az);
@@ -917,6 +1013,7 @@ int main(void)
         printfUart0("Read Data gy =    %d\n", gy);
         printfUart0("Read Data gz =    %d\n\n", gz);
         //printfUart0("Read Data =    %u\n", readMPU);
-        waitMicrosecond(1000000);
+        //waitMicrosecond(1000000);
+         */
     }
 }
