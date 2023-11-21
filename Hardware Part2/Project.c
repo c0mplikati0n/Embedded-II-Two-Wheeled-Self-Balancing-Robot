@@ -50,7 +50,7 @@
 #define MPU6050         0x68  // 110 1000 = 0x68 = ADDR is logic low
 
 #define MAX_SPEED 1023
-#define MIN_SPEED 0
+#define MIN_SPEED 800
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -314,21 +314,18 @@ void processDecodedData(uint32_t data)
             leftWheelSpeed = 1023;
             rightWheelSpeed = 1023;
             currentDirection = 1;
-            goStraight = true;
         break;
         case FORWARD_NORMAL:
             currentButtonAction = FORWARD_NORMAL;
             leftWheelSpeed = 900;
             rightWheelSpeed = 900;
             currentDirection = 1;
-            goStraight = true;
         break;
         case FORWARD_SLOW:
             currentButtonAction = FORWARD_SLOW;
             leftWheelSpeed = 850;
             rightWheelSpeed = 850;
             currentDirection = 1;
-            goStraight = true;
         break;
 
         case BACK_FAST:
@@ -336,21 +333,18 @@ void processDecodedData(uint32_t data)
             leftWheelSpeed = 1023;
             rightWheelSpeed = 1023;
             currentDirection = 0;
-            goStraight = true;
         break;
         case BACK_NORMAL:
             currentButtonAction = BACK_NORMAL;
             leftWheelSpeed = 900;
             rightWheelSpeed = 900;
             currentDirection = 0;
-            goStraight = true;
         break;
         case BACK_SLOW:
             currentButtonAction = BACK_SLOW;
             leftWheelSpeed = 850;
             rightWheelSpeed = 850;
             currentDirection = 0;
-            goStraight = true;
         break;
 
         case ROTATE_LEFT_B:
@@ -406,6 +400,7 @@ void handleButtonAction(void)
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
+                goStraight = true;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -425,6 +420,7 @@ void handleButtonAction(void)
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
+                goStraight = true;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -443,6 +439,7 @@ void handleButtonAction(void)
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
+                goStraight = true;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -460,6 +457,7 @@ void handleButtonAction(void)
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
+                goStraight = true;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -480,6 +478,7 @@ void handleButtonAction(void)
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
+                goStraight = true;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -498,6 +497,7 @@ void handleButtonAction(void)
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
+                goStraight = true;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -642,39 +642,81 @@ void wideTimer5Isr()
     WTIMER5_ICR_R = TIMER_ICR_CAECINT;
 }
 
-//*
-void goStraight()
+/*
+void goStraightISR()
 {
     if((currentButtonState != BUTTON_RELEASED) && (goStraight == true))
     {
-        //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) < 2)
-        if (rightWheelOpticalInterrupt < leftWheelOpticalInterrupt)
-        {
-            setDirection(currentDirection, (leftWheelSpeed-100), rightWheelSpeed);
-        }
+        int interruptDifference = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
 
-        //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) > 2)
-        else if (rightWheelOpticalInterrupt > leftWheelOpticalInterrupt)
+        // Adjust the speed of the wheels based on the difference in interrupts
+        if (interruptDifference > 5)
         {
-            setDirection(currentDirection, leftWheelSpeed, (rightWheelSpeed-100));
+            // Left wheel has more interrupts, slow it down
+            setDirection(currentDirection, (leftWheelSpeed - 100), rightWheelSpeed);
         }
+        else if (interruptDifference < 0)
+        {
+            // Right wheel has more interrupts, slow it down
+            setDirection(currentDirection, leftWheelSpeed, (rightWheelSpeed - 100));
+        }
+        // If interruptDifference is 0, both wheels are moving at the same speed, so no change is needed
     }
     TIMER2_ICR_R = TIMER_ICR_TATOCINT; // Clear timer interrupt
 }
-//*/
+*/
 
 // pid calculation of u
 int32_t coeffKp = 100; // Proportional coefficient
-int32_t coeffKi = 0; // Integral coefficient
-int32_t coeffKd = 0; // Derivative coefficient
+int32_t coeffKi = 5; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20thof kp
+int32_t coeffKd = 1; // Derivative coefficient
 int32_t coeffKo = 0;
-int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
+//int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
 int32_t integral = 0;
 int32_t iMax = 100;
 int32_t diff;
 int32_t error;
 int32_t u = 0;
 int32_t deadBand = 0;
+
+///*
+void pidISR()
+{
+    static int32_t lastError = 0;
+
+    // Calculate error (difference in wheel rotations)
+    error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+
+    // Integral term with windup guard
+    integral += error;
+    if (integral > iMax) integral = iMax;
+    if (integral < -iMax) integral = -iMax;
+
+    // Derivative term
+    int32_t derivative = error - lastError;
+
+    // PID calculation
+    int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
+
+    // Speed limit checks
+    int32_t newLeftSpeed = leftWheelSpeed + output;
+    int32_t newRightSpeed = rightWheelSpeed - output;
+    newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
+    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+
+    // Apply new speeds
+    if (goStraight == true)
+    {
+        setDirection(currentDirection, newLeftSpeed, newRightSpeed);
+    }
+
+    // Prepare for next iteration
+    lastError = error;
+
+    // Clear timer interrupt
+    TIMER2_ICR_R = TIMER_ICR_TATOCINT;
+}
+//*/
 
 /*
 void pidISR()
@@ -758,43 +800,47 @@ void pidISR()
 }
 */
 
-/*
-void pidISR()
+// MPU6050 Registers
+
+#define MPU6050_ADDRESS 0x68
+
+#define MPU6050_PWR_MGMT_1 0x6B
+#define MPU6050_ACCEL_SENSITIVITY 0x1C
+#define MPU6050_GYRO_SENSITIVITY 0x1B
+
+#define MPU6050_OUT_TEMP_H 0x41
+#define MPU6050_OUT_TEMP_L 0x42
+
+#define MPU6050_OUTX_H_G 0x43
+#define MPU6050_OUTX_L_G 0x44
+#define MPU6050_OUTY_H_G 0x45
+#define MPU6050_OUTY_L_G 0x46
+#define MPU6050_OUTZ_H_G 0x47
+#define MPU6050_OUTZ_L_G 0x48
+
+#define MPU6050_OUTX_H_XL 0x3B
+#define MPU6050_OUTX_L_XL 0x3C
+#define MPU6050_OUTY_H_XL 0x3D
+#define MPU6050_OUTY_L_XL 0x3E
+#define MPU6050_OUTZ_H_XL 0x3F
+#define MPU6050_OUTZ_L_XL 0x40
+#define PI 3.1415
+
+#define MPU6050_ACCEL_XOUT_H 0x3B
+#define MPU6050_GYRO_XOUT_H  0x43
+
+void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz)
 {
-    static int32_t lastError = 0;
+    uint8_t data[14];
+    readI2c1Registers(MPU6050, MPU6050_ACCEL_XOUT_H, data, 14);
 
-    // Calculate error (difference in wheel rotations)
-    error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
-
-    // Integral term with windup guard
-    integral += error;
-    if (integral > iMax) integral = iMax;
-    if (integral < -iMax) integral = -iMax;
-
-    // Derivative term
-    int32_t derivative = error - lastError;
-
-    // PID calculation
-    int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
-
-    // Speed limit checks
-    int32_t newLeftSpeed = leftWheelSpeed + output;
-    int32_t newRightSpeed = rightWheelSpeed - output;
-    newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
-    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
-
-    // Apply new speeds
-    if (goStraight) {
-        setDirection(currentDirection, newLeftSpeed, newRightSpeed);
-    }
-
-    // Prepare for next iteration
-    lastError = error;
-
-    // Clear timer interrupt
-    TIMER2_ICR_R = TIMER_ICR_TATOCINT;
+    *ax = (data[0] << 8) | data[1];
+    *ay = (data[2] << 8) | data[3];
+    *az = (data[4] << 8) | data[5];
+    *gx = (data[8] << 8) | data[9];
+    *gy = (data[10] << 8) | data[11];
+    *gz = (data[12] << 8) | data[13];
 }
-*/
 
 //-----------------------------------------------------------------------------
 // Main
@@ -817,6 +863,8 @@ int main(void)
 
     initI2c1();
 
+    int16_t ax, ay, az, gx, gy, gz;
+
     // Verify we can see the MPU-6050 (6-dof IMU) // b110100X // 01101000 -> 0x68
     bool confirmADDR = pollI2c1Address(MPU6050);
     printfUart0("\n\nPolling I2C Address");
@@ -831,7 +879,8 @@ int main(void)
 
     // START condition (S) on the bus, which is defined as a HIGH-to-LOW transition of the SDA line while SCL line is HIGH
     //writeI2c1Data(MPU6050, 1);
-    //waitMicrosecond(10000);
+    writeI2c1Register(MPU6050, MPU6050_PWR_MGMT_1, 0x00);
+    waitMicrosecond(10000);
 
     // The bus is considered to be busy until the master puts
 
@@ -860,7 +909,14 @@ int main(void)
         handleButtonAction();
 
         //uint8_t readMPU = readI2c1Data(MPU6050);
+        readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
+        printfUart0("Read Data ax =    %d\n", ax);
+        printfUart0("Read Data ay =    %d\n", ay);
+        printfUart0("Read Data az =    %d\n", az);
+        printfUart0("Read Data gx =    %d\n", gx);
+        printfUart0("Read Data gy =    %d\n", gy);
+        printfUart0("Read Data gz =    %d\n\n", gz);
         //printfUart0("Read Data =    %u\n", readMPU);
-        //waitMicrosecond(1000000);
+        waitMicrosecond(1000000);
     }
 }
