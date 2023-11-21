@@ -60,6 +60,7 @@ extern void IRdecoder(void);
 extern void wideTimer3Isr(void); // IR
 extern void wideTimer1Isr(void); // Left Wheel
 extern void wideTimer5Isr(void); // Right Wheel
+extern void goStraight(void); // PID/goStraight
 
 //*****************************************************************************
 //
@@ -111,7 +112,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Timer 0 subtimer B
     IntDefaultHandler,                      // Timer 1 subtimer A
     IntDefaultHandler,                      // Timer 1 subtimer B
-    IntDefaultHandler,                      // Timer 2 subtimer A
+    goStraight,                      // Timer 2 subtimer A
     IntDefaultHandler,                      // Timer 2 subtimer B
     IntDefaultHandler,                      // Analog Comparator 0
     IntDefaultHandler,                      // Analog Comparator 1

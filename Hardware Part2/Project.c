@@ -1,6 +1,3 @@
-// Implementing I2C direction thingy, and wheel sensors that make it go straight
-// Xavier A. Portillo-Catalan
-// UTA ID: 1001779115
 
 //-----------------------------------------------------------------------------
 // Hardware Target
@@ -51,6 +48,13 @@
 #define PB_2            PORTF, 0
 
 #define MPU6050         0x68  // 110 1000 = 0x68 = ADDR is logic low
+
+#define MAX_SPEED 1023
+#define MIN_SPEED 0
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 
 //-----------------------------------------------------------------------------
 // Global variables
@@ -108,6 +112,11 @@ uint32_t noSignalCounter = 0;
 bool actionHeldExecuted = false;
 bool actionReleasedExecuted = false;
 
+bool goStraight = false;
+
+uint16_t leftWheelSpeed;
+uint16_t rightWheelSpeed;
+uint16_t currentDirection;
 
 //-----------------------------------------------------------------------------
 // Subroutines
@@ -143,7 +152,10 @@ void initHw(void)
     selectPinPushPullOutput(OUT_PWM_4);
 
     selectPinDigitalInput(TIMER_IN_L);
+    setPinAuxFunction(TIMER_IN_L, GPIO_PCTL_PC6_WT1CCP0);
+
     selectPinDigitalInput(TIMER_IN_R);
+    setPinAuxFunction(TIMER_IN_R, GPIO_PCTL_PD6_WT5CCP0);
 
     selectPinDigitalInput(TIMER_IN_IR);
     setPinAuxFunction(TIMER_IN_IR, GPIO_PCTL_PD2_WT3CCP0);
@@ -191,6 +203,15 @@ void enableTimerMode()
     WTIMER5_TAV_R = 0;                               // zero counter for first period
     WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
+
+    // Configure Timer 2 for PID controller
+    TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
+    TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
+    TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
+    TIMER2_TAILR_R = 40000;                          // set load value to 40000 for 1000 Hz interrupt rate
+    TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
+    NVIC_EN0_R = 1 << (INT_TIMER2A-16);              // turn-on interrupt 39 (TIMER2A)
+    TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
 
 volatile uint32_t timeElapsed = 0;  // global variable to store time
@@ -290,43 +311,79 @@ void processDecodedData(uint32_t data)
     {
         case FORWARD_FAST:
             currentButtonAction = FORWARD_FAST;
+            leftWheelSpeed = 1023;
+            rightWheelSpeed = 1023;
+            currentDirection = 1;
+            goStraight = true;
         break;
         case FORWARD_NORMAL:
             currentButtonAction = FORWARD_NORMAL;
+            leftWheelSpeed = 900;
+            rightWheelSpeed = 900;
+            currentDirection = 1;
+            goStraight = true;
         break;
         case FORWARD_SLOW:
             currentButtonAction = FORWARD_SLOW;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
+            currentDirection = 1;
+            goStraight = true;
         break;
 
         case BACK_FAST:
             currentButtonAction = BACK_FAST;
+            leftWheelSpeed = 1023;
+            rightWheelSpeed = 1023;
+            currentDirection = 0;
+            goStraight = true;
         break;
         case BACK_NORMAL:
             currentButtonAction = BACK_NORMAL;
+            leftWheelSpeed = 900;
+            rightWheelSpeed = 900;
+            currentDirection = 0;
+            goStraight = true;
         break;
         case BACK_SLOW:
             currentButtonAction = BACK_SLOW;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
+            currentDirection = 0;
+            goStraight = true;
         break;
 
         case ROTATE_LEFT_B:
             currentButtonAction = ROTATE_LEFT_B;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
         break;
         case ROTATE_LEFT_F:
             currentButtonAction = ROTATE_LEFT_F;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
         break;
 
         case ROTATE_RIGHT_B:
             currentButtonAction = ROTATE_RIGHT_B;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
         break;
         case ROTATE_RIGHT_F:
             currentButtonAction = ROTATE_RIGHT_F;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
         break;
 
         case SPINNING_BOI_1:
             currentButtonAction = SPINNING_BOI_1;
+            leftWheelSpeed = 900;
+            rightWheelSpeed = 900;
         break;
         case SPINNING_BOI_2:
             currentButtonAction = SPINNING_BOI_2;
+            leftWheelSpeed = 900;
+            rightWheelSpeed = 900;
         break;
         // Handle other buttons similarly when you have their decoded data
         default:
@@ -348,8 +405,7 @@ void handleButtonAction(void)
         case FORWARD_FAST:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                setDirection(1, 1023, 1023); // Both wheels go forwards
-                //printfUart0("\nFORWARD_FAST\n");
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -357,7 +413,6 @@ void handleButtonAction(void)
             {
                 slowDown(1, 1023, 1023);
                 turnOffAll();
-                //printfUart0("\nOFF\n");
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
                 //currentButtonState = BUTTON_RELEASED;
@@ -369,7 +424,7 @@ void handleButtonAction(void)
             {
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 900, 900); // Both wheels go forwards
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -387,7 +442,7 @@ void handleButtonAction(void)
             {
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
-                setDirection(1, 850, 850); // Both wheels go forwards
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -404,7 +459,7 @@ void handleButtonAction(void)
         case BACK_FAST:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                setDirection(0, 1023, 1023); // Both wheels go backwards
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -424,7 +479,7 @@ void handleButtonAction(void)
             {
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
-                setDirection(0, 900, 900); // Both wheels go backwards
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -442,7 +497,7 @@ void handleButtonAction(void)
             {
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
-                setDirection(0, 850, 850); // Both wheels go backwards
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -563,15 +618,12 @@ uint32_t rightWheelOpticalInterrupt = 0;
 void wideTimer1Isr()
 {
     leftWheelOpticalInterrupt++;
-    printfUart0("left Wheel Optical Interrupt:  %d \n", leftWheelOpticalInterrupt);
-
+    //printfUart0("left Wheel Optical Interrupt:  %d \n", leftWheelOpticalInterrupt);
     if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
     {
-        rightWheelOpticalInterrupt = 0;
-        printfUart0("left Wheel Full Rotation\n");
+        //rightWheelOpticalInterrupt = 0;
+        //printfUart0("left Wheel Full Rotation\n");
     }
-
-
     // 1m = 100cm = 2FullRotation + 20cm
     WTIMER1_ICR_R = TIMER_ICR_CAECINT;           // clear interrupt flag
 }
@@ -580,32 +632,169 @@ void wideTimer1Isr()
 void wideTimer5Isr()
 {
     rightWheelOpticalInterrupt++;
-    printfUart0("Right Wheel Optical Interrupt: %d \n", rightWheelOpticalInterrupt);
-
+    //printfUart0("Right Wheel Optical Interrupt: %d \n", rightWheelOpticalInterrupt);
     if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel
     {
-        rightWheelOpticalInterrupt = 0;
-        printfUart0("Right Wheel Full Rotation\n");
+        //rightWheelOpticalInterrupt = 0;
+        //printfUart0("Right Wheel Full Rotation\n");
     }
-
     // 1m = 100cm = 2FullRotation + 20cm
     WTIMER5_ICR_R = TIMER_ICR_CAECINT;
 }
 
+//*
 void goStraight()
 {
-    //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) < 2)
-    if (rightWheelOpticalInterrupt < leftWheelOpticalInterrupt)
+    if((currentButtonState != BUTTON_RELEASED) && (goStraight == true))
     {
+        //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) < 2)
+        if (rightWheelOpticalInterrupt < leftWheelOpticalInterrupt)
+        {
+            setDirection(currentDirection, (leftWheelSpeed-100), rightWheelSpeed);
+        }
 
+        //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) > 2)
+        else if (rightWheelOpticalInterrupt > leftWheelOpticalInterrupt)
+        {
+            setDirection(currentDirection, leftWheelSpeed, (rightWheelSpeed-100));
+        }
     }
-
-    //if ((RightWheelOpticalInterrupt - LeftWheelOpticalInterrupt) > 2)
-    if (rightWheelOpticalInterrupt > leftWheelOpticalInterrupt)
-    {
-
-    }
+    TIMER2_ICR_R = TIMER_ICR_TATOCINT; // Clear timer interrupt
 }
+//*/
+
+// pid calculation of u
+int32_t coeffKp = 100; // Proportional coefficient
+int32_t coeffKi = 0; // Integral coefficient
+int32_t coeffKd = 0; // Derivative coefficient
+int32_t coeffKo = 0;
+int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
+int32_t integral = 0;
+int32_t iMax = 100;
+int32_t diff;
+int32_t error;
+int32_t u = 0;
+int32_t deadBand = 0;
+
+/*
+void pidISR()
+{
+    // Calculate error (difference in wheel rotations)
+    error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+
+    // Proportional term
+    float pTerm = kp * error;
+
+    // Integral term
+    integral += error;
+    float iTerm = ki * integral;
+
+    // Derivative term
+    derivative = error - previous_error;
+    float dTerm = kd * derivative;
+
+    // Total correction
+    correction = pTerm + iTerm + dTerm;
+
+    // Adjust wheel speeds based on correction
+    // Make sure to limit the speeds to avoid exceeding maximum values
+    leftWheelSpeed = MAX(MIN(leftWheelSpeed - correction, MAX_SPEED), MIN_SPEED);
+    rightWheelSpeed = MAX(MIN(rightWheelSpeed + correction, MAX_SPEED), MIN_SPEED);
+
+    // Set the new speeds
+    if (goStraight == true)
+    {
+        setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
+    }
+
+    // Update for next iteration
+    previous_error = error;
+
+    TIMER2_ICR_R = TIMER_ICR_TATOCINT; // Clear timer interrupt
+}
+*/
+
+/*
+void pidISR()
+{
+    static int32_t errorLast = 0;
+
+    if (goStraight == true)
+    {
+        // Calculate error (difference in wheel rotations)
+        error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+
+        // calculate integral and prevent windup
+        integral += error;
+
+        int32_t iLimit = iMax * coeffKi;
+        if (integral > iLimit)
+            integral = iLimit;
+        if (integral < -iLimit)
+            integral = -iLimit;
+
+        // calculate differential
+        diff = error - errorLast;
+        errorLast = error;
+
+        // calculate plant input, saturating 10 bit output if needed
+        u = (coeffKp * error) + (coeffKi * integral) + (coeffKd * diff);
+        u /= coeffK;
+        if (u > 1023) u = 1023;
+        if (u < -1023) u = -1023;
+
+        // set direction and speed based on mode
+        if (abs(error) > deadBand)
+        {
+            setDirection(currentDirection, abs(u) + coeffKo, abs(u) + coeffKo);
+        }
+        else
+        {
+            setDirection(currentDirection, 0, 0);
+        }
+    }
+
+    TIMER2_ICR_R = TIMER_ICR_TATOCINT;
+}
+*/
+
+/*
+void pidISR()
+{
+    static int32_t lastError = 0;
+
+    // Calculate error (difference in wheel rotations)
+    error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+
+    // Integral term with windup guard
+    integral += error;
+    if (integral > iMax) integral = iMax;
+    if (integral < -iMax) integral = -iMax;
+
+    // Derivative term
+    int32_t derivative = error - lastError;
+
+    // PID calculation
+    int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
+
+    // Speed limit checks
+    int32_t newLeftSpeed = leftWheelSpeed + output;
+    int32_t newRightSpeed = rightWheelSpeed - output;
+    newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
+    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+
+    // Apply new speeds
+    if (goStraight) {
+        setDirection(currentDirection, newLeftSpeed, newRightSpeed);
+    }
+
+    // Prepare for next iteration
+    lastError = error;
+
+    // Clear timer interrupt
+    TIMER2_ICR_R = TIMER_ICR_TATOCINT;
+}
+*/
 
 //-----------------------------------------------------------------------------
 // Main
@@ -662,6 +851,10 @@ int main(void)
             //printfUart0("Button Released\n");
             //actionHeldExecuted = false;
             //actionReleasedExecuted = false;
+
+            leftWheelOpticalInterrupt = 0;
+            rightWheelOpticalInterrupt = 0;
+            goStraight = false;
         }
 
         handleButtonAction();

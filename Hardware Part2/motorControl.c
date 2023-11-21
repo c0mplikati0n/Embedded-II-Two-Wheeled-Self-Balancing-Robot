@@ -1,6 +1,10 @@
 // Motor Library
 // Xavier
 
+// Implementing I2C direction thingy, and wheel sensors that make it go straight
+// Xavier A. Portillo-Catalan
+// UTA ID: 1001779115
+
 //-----------------------------------------------------------------------------
 // Hardware Target
 //-----------------------------------------------------------------------------
