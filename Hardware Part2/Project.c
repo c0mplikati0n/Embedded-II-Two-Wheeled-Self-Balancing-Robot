@@ -196,7 +196,7 @@ void enableTimerMode()
     WTIMER1_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
     WTIMER1_CFG_R = 4;                               // configure as 32-bit counter (A only)
     WTIMER1_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
-    WTIMER1_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from positive edge to positive edge
+    WTIMER1_CTL_R = TIMER_CTL_TAEVENT_NEG;           // measure time from negative edge to negative edge
     WTIMER1_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
     WTIMER1_TAV_R = 0;                               // zero counter for first period
     WTIMER1_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
@@ -206,7 +206,7 @@ void enableTimerMode()
     WTIMER5_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
     WTIMER5_CFG_R = 4;                               // configure as 32-bit counter (A only)
     WTIMER5_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
-    WTIMER5_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from positive edge to positive edge
+    WTIMER5_CTL_R = TIMER_CTL_TAEVENT_NEG;           // measure time from negative edge to negative edge
     WTIMER5_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
     WTIMER5_TAV_R = 0;                               // zero counter for first period
     WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
@@ -216,7 +216,7 @@ void enableTimerMode()
     TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER2_TAILR_R = 40000;                          // set load value to 40000 for 1000 Hz interrupt rate
+    TIMER2_TAILR_R = 4000;                          // set load value to 40000 for 1000 Hz interrupt rate
     TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
     NVIC_EN0_R = 1 << (INT_TIMER2A-16);              // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
@@ -768,21 +768,29 @@ void goStraightISR()
 
 // pid calculation of u
 float coeffKp = 1; // Proportional coefficient
-float coeffKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKi = 0.1; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float coeffKd = 0; // Derivative coefficient
 
 int32_t coeffKo = 0;
 //int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
 int32_t integral = 0;
-int32_t iMax = 1000; // 100
+int32_t iMax = 100; // 100
 int32_t diff;
 int32_t error;
 int32_t u = 0;
 int32_t deadBand = 0;
 
+int32_t prevLeftWheelOpticalInterrupt = 0;
+
 void pidISR()
 {
     static int32_t lastError = 0;
+
+    if (leftWheelOpticalInterrupt - prevLeftWheelOpticalInterrupt > 3) {
+        leftWheelOpticalInterrupt = prevLeftWheelOpticalInterrupt;
+    } else {
+        prevLeftWheelOpticalInterrupt = leftWheelOpticalInterrupt;
+    }
 
     // Calculate error (difference in wheel rotations)
     error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
@@ -828,7 +836,7 @@ void pidISR()
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
         ///*
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
-        printfUart0("Error = %d   LastError = %d   ", error, lastError);
+        printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, lastError, integral);
         printfUart0("derivative = %d   output = %d   ", derivative, output);
         printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
         ///*/
