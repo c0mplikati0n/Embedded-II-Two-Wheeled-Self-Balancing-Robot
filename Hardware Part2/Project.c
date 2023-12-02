@@ -50,7 +50,7 @@
 #define MPU6050         0x68  // 110 1000 = 0x68 = ADDR is logic low
 
 #define MAX_SPEED 1023
-#define MIN_SPEED 800
+#define MIN_SPEED 850
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -68,6 +68,7 @@ typedef enum
     NEC_DATA
 } NEC_State;
 
+// LED Remote
 typedef enum
 {
     NONE = 0,
@@ -708,10 +709,14 @@ void rotate(uint8_t degrees, bool direction)
 uint32_t leftWheelOpticalInterrupt = 0;
 uint32_t rightWheelOpticalInterrupt = 0;
 
+uint32_t leftWheelDistanceTraveled = 0;
+uint32_t rightWheelDistanceTraveled = 0;
+
 // Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
 void wideTimer1Isr()
 {
     leftWheelOpticalInterrupt++;
+    leftWheelDistanceTraveled = leftWheelOpticalInterrupt;
     //printfUart0("left Wheel Optical Interrupt:  %d \n", leftWheelOpticalInterrupt);
     if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
     {
@@ -726,6 +731,7 @@ void wideTimer1Isr()
 void wideTimer5Isr()
 {
     rightWheelOpticalInterrupt++;
+    rightWheelDistanceTraveled = rightWheelOpticalInterrupt;
     //printfUart0("Right Wheel Optical Interrupt: %d \n", rightWheelOpticalInterrupt);
     if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel
     {
@@ -761,13 +767,14 @@ void goStraightISR()
 */
 
 // pid calculation of u
-int32_t coeffKp = 100; // Proportional coefficient
-int32_t coeffKi = 5; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20thof kp
-int32_t coeffKd = 1; // Derivative coefficient
+float coeffKp = 200; // Proportional coefficient
+float coeffKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKd = 0; // Derivative coefficient
+
 int32_t coeffKo = 0;
 //int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
 int32_t integral = 0;
-int32_t iMax = 100;
+int32_t iMax = 1000; // 100
 int32_t diff;
 int32_t error;
 int32_t u = 0;
@@ -795,6 +802,7 @@ void pidISR()
     // Speed limit checks
     int32_t newLeftSpeed = leftWheelSpeed + output;
     int32_t newRightSpeed = rightWheelSpeed - output;
+
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
 
@@ -802,6 +810,7 @@ void pidISR()
     if (goStraight == true)
     {
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
+        printfUart0("newLeftSpeed =    %d      newRightSpeed =    %d\n", newLeftSpeed, newRightSpeed);
     }
 
     // Prepare for next iteration
@@ -813,86 +822,85 @@ void pidISR()
 //*/
 
 /*
+// PID Values
+double input, output, leftLastError, poportional, derivative, rightLastError;
+double rightIntegral = 0;
+double leftIntegral = 0;
+
+// pidcount is used to divide the total error (integral formula)
+int pidcount = 1;
+
+// PID Multipliers
+double kp = 10; // 2
+double ki = 0; // 0.3
+double kd = 0; // 0.5
+
+// The setpoint is used in the PID equation
+double setPoint = 30;
+
 void pidISR()
 {
-    // Calculate error (difference in wheel rotations)
-    error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+    //========== Right ==========
+    // Move encoder count to input and reset to 0
+    input = rightWheelOpticalInterrupt;
+    rightWheelOpticalInterrupt = 0;
 
-    // Proportional term
-    float pTerm = kp * error;
+    // Calculate the PID values
+    poportional = setPoint - input;
+    derivative = poportional - rightLastError;
+    rightIntegral = (rightIntegral + poportional)/pidcount;
 
-    // Integral term
-    integral += error;
-    float iTerm = ki * integral;
+    // Scale the PID values and save total as output
+    output = kp * poportional + kd * derivative + ki * rightIntegral;
+    //int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
 
-    // Derivative term
-    derivative = error - previous_error;
-    float dTerm = kd * derivative;
+    // Save variables for next time
+    rightLastError = poportional;
 
-    // Total correction
-    correction = pTerm + iTerm + dTerm;
+    // Add fanal value to speed only if value is lower then 255
+    if((rightWheelSpeed + output) > 900) rightWheelSpeed = 900; // for Normal speed
+    else rightWheelSpeed = output + rightWheelSpeed;
 
-    // Adjust wheel speeds based on correction
-    // Make sure to limit the speeds to avoid exceeding maximum values
-    leftWheelSpeed = MAX(MIN(leftWheelSpeed - correction, MAX_SPEED), MIN_SPEED);
-    rightWheelSpeed = MAX(MIN(rightWheelSpeed + correction, MAX_SPEED), MIN_SPEED);
+    // Finally, set the updated value as new speed
+    //analogWrite(rpwm, rightSpeed);
 
-    // Set the new speeds
+    //========== Left ==========
+    // Move encoder count to input and reset to 0
+    input = leftWheelOpticalInterrupt;
+    leftWheelOpticalInterrupt = 0;
+
+    // Calculate the PID values
+    poportional = setPoint - input;
+    derivative = poportional - leftLastError;
+    leftIntegral = (leftIntegral + poportional)/pidcount;
+
+    // Scale the PID values and save total as output
+    output = kp * poportional + kd * derivative + ki * leftIntegral;
+
+    // Save variables for next time
+    leftLastError = poportional;
+    pidcount++;
+
+    // Add fanal value to speed only if value is lower then 255
+    if((leftWheelSpeed + output) > 900) leftWheelSpeed = 900; // for Normal speed
+    else leftWheelSpeed = output + leftWheelSpeed;
+
+    // Finally, set the updated value as new speed
+    //analogWrite(lpwm, leftSpeed);
+
     if (goStraight == true)
     {
         setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
     }
 
-    // Update for next iteration
-    previous_error = error;
+    //delay(100);
 
-    TIMER2_ICR_R = TIMER_ICR_TATOCINT; // Clear timer interrupt
-}
-*/
-
-/*
-void pidISR()
-{
-    static int32_t errorLast = 0;
-
-    if (goStraight == true)
-    {
-        // Calculate error (difference in wheel rotations)
-        error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
-
-        // calculate integral and prevent windup
-        integral += error;
-
-        int32_t iLimit = iMax * coeffKi;
-        if (integral > iLimit)
-            integral = iLimit;
-        if (integral < -iLimit)
-            integral = -iLimit;
-
-        // calculate differential
-        diff = error - errorLast;
-        errorLast = error;
-
-        // calculate plant input, saturating 10 bit output if needed
-        u = (coeffKp * error) + (coeffKi * integral) + (coeffKd * diff);
-        u /= coeffK;
-        if (u > 1023) u = 1023;
-        if (u < -1023) u = -1023;
-
-        // set direction and speed based on mode
-        if (abs(error) > deadBand)
-        {
-            setDirection(currentDirection, abs(u) + coeffKo, abs(u) + coeffKo);
-        }
-        else
-        {
-            setDirection(currentDirection, 0, 0);
-        }
-    }
-
+    // Clear timer interrupt
     TIMER2_ICR_R = TIMER_ICR_TATOCINT;
 }
 */
+
+
 
 // MPU6050 Registers
 
@@ -918,6 +926,7 @@ void pidISR()
 #define MPU6050_OUTY_L_XL 0x3E
 #define MPU6050_OUTZ_H_XL 0x3F
 #define MPU6050_OUTZ_L_XL 0x40
+
 #define PI 3.1415
 
 #define MPU6050_ACCEL_XOUT_H 0x3B
@@ -934,6 +943,22 @@ void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy
     *gx = (data[8] << 8) | data[9];
     *gy = (data[10] << 8) | data[11];
     *gz = (data[12] << 8) | data[13];
+}
+
+void readMPU6050Data()
+{
+    int16_t ax, ay, az, gx, gy, gz;
+
+    //uint8_t readMPU = readI2c1Data(MPU6050);
+    readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
+
+    printfUart0("Read Data ax =    %d\n", ax);
+    printfUart0("Read Data ay =    %d\n", ay);
+    printfUart0("Read Data az =    %d\n", az);
+    printfUart0("Read Data gx =    %d\n", gx);
+    printfUart0("Read Data gy =    %d\n", gy);
+    printfUart0("Read Data gz =    %d\n\n", gz);
+    //printfUart0("Read Data =    %u\n", readMPU);
 }
 
 //-----------------------------------------------------------------------------
@@ -956,8 +981,6 @@ int main(void)
     printfUart0("\n\nInitialization Success\n\n");
 
     initI2c1();
-
-    int16_t ax, ay, az, gx, gy, gz;
 
     // Verify we can see the MPU-6050 (6-dof IMU) // b110100X // 01101000 -> 0x68
     bool confirmADDR = pollI2c1Address(MPU6050);
@@ -998,22 +1021,13 @@ int main(void)
             leftWheelOpticalInterrupt = 0;
             rightWheelOpticalInterrupt = 0;
             goStraight = false;
+
+            //pidcount = 0;
         }
 
         handleButtonAction();
 
-
-        //uint8_t readMPU = readI2c1Data(MPU6050);
-        readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
-        /*
-        printfUart0("Read Data ax =    %d\n", ax);
-        printfUart0("Read Data ay =    %d\n", ay);
-        printfUart0("Read Data az =    %d\n", az);
-        printfUart0("Read Data gx =    %d\n", gx);
-        printfUart0("Read Data gy =    %d\n", gy);
-        printfUart0("Read Data gz =    %d\n\n", gz);
-        //printfUart0("Read Data =    %u\n", readMPU);
+        //readMPU6050Data();
         //waitMicrosecond(1000000);
-         */
     }
 }
