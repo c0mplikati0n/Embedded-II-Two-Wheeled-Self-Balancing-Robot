@@ -126,6 +126,12 @@ uint16_t leftWheelSpeed;
 uint16_t rightWheelSpeed;
 uint16_t currentDirection;
 
+int32_t leftWheelOpticalInterrupt = 0;
+int32_t rightWheelOpticalInterrupt = 0;
+
+int32_t leftWheelDistanceTraveled = 0;
+int32_t rightWheelDistanceTraveled = 0;
+
 //-----------------------------------------------------------------------------
 // Subroutines
 //-----------------------------------------------------------------------------
@@ -442,6 +448,8 @@ void handleButtonAction(void)
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -461,6 +469,8 @@ void handleButtonAction(void)
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -500,6 +510,8 @@ void handleButtonAction(void)
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -519,6 +531,8 @@ void handleButtonAction(void)
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -706,11 +720,7 @@ void rotate(uint8_t degrees, bool direction)
 }
 
 
-int32_t leftWheelOpticalInterrupt = 0;
-int32_t rightWheelOpticalInterrupt = 0;
 
-int32_t leftWheelDistanceTraveled = 0;
-int32_t rightWheelDistanceTraveled = 0;
 
 // Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
 void wideTimer1Isr()
@@ -767,8 +777,8 @@ void goStraightISR()
 */
 
 // pid calculation of u
-float coeffKp = 1; // Proportional coefficient
-float coeffKi = 0.1; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKp = 10; // Proportional coefficient
+float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float coeffKd = 0; // Derivative coefficient
 
 int32_t coeffKo = 0;
@@ -786,10 +796,14 @@ void pidISR()
 {
     static int32_t lastError = 0;
 
-    if (leftWheelOpticalInterrupt - prevLeftWheelOpticalInterrupt > 3) {
+    if (leftWheelOpticalInterrupt - prevLeftWheelOpticalInterrupt > 4) {
         leftWheelOpticalInterrupt = prevLeftWheelOpticalInterrupt;
     } else {
         prevLeftWheelOpticalInterrupt = leftWheelOpticalInterrupt;
+    }
+
+    if (leftWheelOpticalInterrupt > (rightWheelOpticalInterrupt + 10)) {
+            leftWheelOpticalInterrupt = rightWheelOpticalInterrupt;
     }
 
     // Calculate error (difference in wheel rotations)
@@ -824,11 +838,13 @@ void pidISR()
     int32_t newLeftSpeed = leftWheelSpeed - output;
     int32_t newRightSpeed = rightWheelSpeed + output;
 
-    //newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
-    //newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+    newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
+    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+    //#define MAX(a, b) ((a) > (b) ? (a) : (b))
+    //#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-    newLeftSpeed = (newLeftSpeed > MAX_SPEED) ? MAX_SPEED : ((newLeftSpeed < MIN_SPEED) ? MIN_SPEED : newLeftSpeed);
-    newRightSpeed = (newRightSpeed > MAX_SPEED) ? MAX_SPEED : ((newRightSpeed < MIN_SPEED) ? MIN_SPEED : newRightSpeed);
+    //newLeftSpeed = (newLeftSpeed > MAX_SPEED) ? MAX_SPEED : ((newLeftSpeed < MIN_SPEED) ? MIN_SPEED : newLeftSpeed);
+    //newRightSpeed = (newRightSpeed > MAX_SPEED) ? MAX_SPEED : ((newRightSpeed < MIN_SPEED) ? MIN_SPEED : newRightSpeed);
 
     // Apply new speeds
     if (goStraight == true)
