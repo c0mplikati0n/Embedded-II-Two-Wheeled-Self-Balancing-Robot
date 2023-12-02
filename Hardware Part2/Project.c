@@ -706,11 +706,11 @@ void rotate(uint8_t degrees, bool direction)
 }
 
 
-uint32_t leftWheelOpticalInterrupt = 0;
-uint32_t rightWheelOpticalInterrupt = 0;
+int32_t leftWheelOpticalInterrupt = 0;
+int32_t rightWheelOpticalInterrupt = 0;
 
-uint32_t leftWheelDistanceTraveled = 0;
-uint32_t rightWheelDistanceTraveled = 0;
+int32_t leftWheelDistanceTraveled = 0;
+int32_t rightWheelDistanceTraveled = 0;
 
 // Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
 void wideTimer1Isr()
@@ -767,7 +767,7 @@ void goStraightISR()
 */
 
 // pid calculation of u
-float coeffKp = 200; // Proportional coefficient
+float coeffKp = 1; // Proportional coefficient
 float coeffKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float coeffKd = 0; // Derivative coefficient
 
@@ -780,13 +780,23 @@ int32_t error;
 int32_t u = 0;
 int32_t deadBand = 0;
 
-///*
 void pidISR()
 {
     static int32_t lastError = 0;
 
     // Calculate error (difference in wheel rotations)
     error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+
+    if( error > 0 )
+    {
+      // left motor is turning faster
+      //Serial.println("Turning Right");
+    }
+    else if( error < 0 )
+    {
+      // right motor is turning faster
+      //Serial.println("Turning Left");
+    }
 
     // Integral term with windup guard
     integral += error;
@@ -799,18 +809,30 @@ void pidISR()
     // PID calculation
     int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
 
-    // Speed limit checks
-    int32_t newLeftSpeed = leftWheelSpeed + output;
-    int32_t newRightSpeed = rightWheelSpeed - output;
+    // Scale down the output to avoid large jumps in speed
+    //output = output / 10; // Adjust this scaling factor as needed
 
-    newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
-    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+    // Speed limit checks
+    int32_t newLeftSpeed = leftWheelSpeed - output;
+    int32_t newRightSpeed = rightWheelSpeed + output;
+
+    //newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
+    //newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+
+    newLeftSpeed = (newLeftSpeed > MAX_SPEED) ? MAX_SPEED : ((newLeftSpeed < MIN_SPEED) ? MIN_SPEED : newLeftSpeed);
+    newRightSpeed = (newRightSpeed > MAX_SPEED) ? MAX_SPEED : ((newRightSpeed < MIN_SPEED) ? MIN_SPEED : newRightSpeed);
 
     // Apply new speeds
     if (goStraight == true)
     {
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
-        printfUart0("newLeftSpeed =    %d      newRightSpeed =    %d\n", newLeftSpeed, newRightSpeed);
+        ///*
+        printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
+        printfUart0("Error = %d   LastError = %d   ", error, lastError);
+        printfUart0("derivative = %d   output = %d   ", derivative, output);
+        printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
+        ///*/
+
     }
 
     // Prepare for next iteration
@@ -819,86 +841,6 @@ void pidISR()
     // Clear timer interrupt
     TIMER2_ICR_R = TIMER_ICR_TATOCINT;
 }
-//*/
-
-/*
-// PID Values
-double input, output, leftLastError, poportional, derivative, rightLastError;
-double rightIntegral = 0;
-double leftIntegral = 0;
-
-// pidcount is used to divide the total error (integral formula)
-int pidcount = 1;
-
-// PID Multipliers
-double kp = 10; // 2
-double ki = 0; // 0.3
-double kd = 0; // 0.5
-
-// The setpoint is used in the PID equation
-double setPoint = 30;
-
-void pidISR()
-{
-    //========== Right ==========
-    // Move encoder count to input and reset to 0
-    input = rightWheelOpticalInterrupt;
-    rightWheelOpticalInterrupt = 0;
-
-    // Calculate the PID values
-    poportional = setPoint - input;
-    derivative = poportional - rightLastError;
-    rightIntegral = (rightIntegral + poportional)/pidcount;
-
-    // Scale the PID values and save total as output
-    output = kp * poportional + kd * derivative + ki * rightIntegral;
-    //int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
-
-    // Save variables for next time
-    rightLastError = poportional;
-
-    // Add fanal value to speed only if value is lower then 255
-    if((rightWheelSpeed + output) > 900) rightWheelSpeed = 900; // for Normal speed
-    else rightWheelSpeed = output + rightWheelSpeed;
-
-    // Finally, set the updated value as new speed
-    //analogWrite(rpwm, rightSpeed);
-
-    //========== Left ==========
-    // Move encoder count to input and reset to 0
-    input = leftWheelOpticalInterrupt;
-    leftWheelOpticalInterrupt = 0;
-
-    // Calculate the PID values
-    poportional = setPoint - input;
-    derivative = poportional - leftLastError;
-    leftIntegral = (leftIntegral + poportional)/pidcount;
-
-    // Scale the PID values and save total as output
-    output = kp * poportional + kd * derivative + ki * leftIntegral;
-
-    // Save variables for next time
-    leftLastError = poportional;
-    pidcount++;
-
-    // Add fanal value to speed only if value is lower then 255
-    if((leftWheelSpeed + output) > 900) leftWheelSpeed = 900; // for Normal speed
-    else leftWheelSpeed = output + leftWheelSpeed;
-
-    // Finally, set the updated value as new speed
-    //analogWrite(lpwm, leftSpeed);
-
-    if (goStraight == true)
-    {
-        setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
-    }
-
-    //delay(100);
-
-    // Clear timer interrupt
-    TIMER2_ICR_R = TIMER_ICR_TATOCINT;
-}
-*/
 
 
 
