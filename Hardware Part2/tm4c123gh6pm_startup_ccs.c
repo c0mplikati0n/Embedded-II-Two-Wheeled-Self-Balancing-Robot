@@ -60,6 +60,7 @@ extern void IRdecoder(void);
 extern void wideTimer3Isr(void); // IR
 extern void wideTimer1Isr(void); // Left Wheel
 extern void wideTimer5Isr(void); // Right Wheel
+extern void balancePID(void); // PID (Balance)
 extern void pidISR(void); // PID
 //extern void goStraightISR(void); // PID/goStraight
 
@@ -112,7 +113,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Watchdog timer
     IntDefaultHandler,                      // Timer 0 subtimer A
     IntDefaultHandler,                      // Timer 0 subtimer B
-    IntDefaultHandler,                      // Timer 1 subtimer A
+    balancePID,                      // Timer 1 subtimer A
     IntDefaultHandler,                      // Timer 1 subtimer B
     pidISR,                      // Timer 2 subtimer A
     //goStraightISR,                      // Timer 2 subtimer A

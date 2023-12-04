@@ -22,6 +22,7 @@
 #include "motorControl.h"
 #include "nvic.h"
 #include "i2c1.h"
+#include <math.h>
 //#include "irDecoder.h"
 
 // Pins
@@ -51,6 +52,8 @@
 
 #define MAX_SPEED 1023
 #define MIN_SPEED 850
+
+#define PI 3.1415
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -92,7 +95,9 @@ typedef enum
     ROTATE_CCW_180 = 16747125,
 
     SPINNING_BOI_1 = 16718565,
-    SPINNING_BOI_2 = 16751205
+    SPINNING_BOI_2 = 16751205,
+
+    BALANCE = 16712445
     // Add other buttons
 } ButtonAction;
 
@@ -121,6 +126,7 @@ bool actionHeldExecuted = false;
 bool actionReleasedExecuted = false;
 
 bool goStraight = false;
+bool goBalance = false;
 
 uint16_t leftWheelSpeed;
 uint16_t rightWheelSpeed;
@@ -218,11 +224,20 @@ void enableTimerMode()
     WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
 
-    // Configure Timer 2 for PID controller
+    // Configure Timer 1 for PID controller (Balance)
+    TIMER1_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
+    TIMER1_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
+    TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
+    TIMER1_TAILR_R = 4000000;                          // set load value to 40000 for 1000 Hz interrupt rate
+    TIMER1_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
+    NVIC_EN0_R = 1 << (INT_TIMER1A-16);              // turn-on interrupt 37 (TIMER1A)
+    TIMER1_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
+
+    // Configure Timer 2 for PID controller (Driving Straight)
     TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER2_TAILR_R = 4000;                          // set load value to 40000 for 1000 Hz interrupt rate
+    TIMER2_TAILR_R = 40000;                          // set load value to 40000 for 1000 Hz interrupt rate
     TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
     NVIC_EN0_R = 1 << (INT_TIMER2A-16);              // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
@@ -405,6 +420,10 @@ void processDecodedData(uint32_t data)
             currentButtonAction = SPINNING_BOI_2;
             leftWheelSpeed = 900;
             rightWheelSpeed = 900;
+        break;
+
+        case BALANCE:
+            currentButtonAction = BALANCE;
         break;
         // Handle other buttons similarly when you have their decoded data
         default:
@@ -697,6 +716,23 @@ void handleButtonAction(void)
             }
         break;
 
+        case BALANCE:
+            if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
+            {
+                // toggle a global variable to turn balance on/off for testing
+
+                goBalance ^= 1;
+
+                actionHeldExecuted = true;
+                actionReleasedExecuted = false;
+            }
+            else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
+            {
+                actionReleasedExecuted = true;
+                actionHeldExecuted = false;
+            }
+        break;
+
         default:
             turnOffAll();
         break;
@@ -850,12 +886,12 @@ void pidISR()
     if (goStraight == true)
     {
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
-        ///*
+        /*
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, lastError, integral);
         printfUart0("derivative = %d   output = %d   ", derivative, output);
         printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
-        ///*/
+        */
 
     }
 
@@ -868,8 +904,11 @@ void pidISR()
 
 
 
-// MPU6050 Registers
 
+
+
+
+// MPU6050 Registers
 #define MPU6050_ADDRESS 0x68
 
 #define MPU6050_PWR_MGMT_1 0x6B
@@ -893,8 +932,6 @@ void pidISR()
 #define MPU6050_OUTZ_H_XL 0x3F
 #define MPU6050_OUTZ_L_XL 0x40
 
-#define PI 3.1415
-
 #define MPU6050_ACCEL_XOUT_H 0x3B
 #define MPU6050_GYRO_XOUT_H  0x43
 
@@ -911,20 +948,68 @@ void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy
     *gz = (data[12] << 8) | data[13];
 }
 
-void readMPU6050Data()
+// pid calculation of u
+float balanceKp = 10; // Proportional coefficient
+float balanceKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float balanceKd = 0; // Derivative coefficient
+
+int32_t balanceKo = 0;
+//int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
+int32_t balanceIntegral = 0;
+int32_t balanceiMax = 100; // 100
+int32_t balancediff;
+int32_t balanceError;
+int32_t balanceU = 0;
+int32_t balanceDeadBand = 0;
+//int32_t balanceLastError = 0;
+
+// Function to calculate the tilt angle
+float calculateTiltAngle(int16_t ax, int16_t ay, int16_t az) {
+    // Assuming ax, ay, az are the accelerometer readings
+    // Calculate the tilt angle (in degrees)
+    float tiltAngle = atan2(ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+    return tiltAngle;
+}
+
+void balancePID()
 {
     int16_t ax, ay, az, gx, gy, gz;
+    readMPU6050(&ax, &ay, &az, &gx, &gy, &gz); // Read MPU6050 data
 
-    //uint8_t readMPU = readI2c1Data(MPU6050);
-    readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
+    static int32_t balanceLastError = 0;
 
-    printfUart0("Read Data ax =    %d\n", ax);
-    printfUart0("Read Data ay =    %d\n", ay);
-    printfUart0("Read Data az =    %d\n", az);
-    printfUart0("Read Data gx =    %d\n", gx);
-    printfUart0("Read Data gy =    %d\n", gy);
-    printfUart0("Read Data gz =    %d\n\n", gz);
-    //printfUart0("Read Data =    %u\n", readMPU);
+    float tiltAngle = calculateTiltAngle(ax, ay, az); // Calculate the tilt angle
+    float error = 0 - tiltAngle; // Desired angle is 0 (upright)
+
+    // Update integral and derivative terms
+    balanceIntegral += error;
+    if (balanceIntegral > balanceiMax) balanceIntegral = balanceiMax;
+    if (balanceIntegral < -balanceiMax) balanceIntegral = -balanceiMax;
+
+    int32_t derivative = error - balanceLastError;
+
+    // PID output
+    int32_t output = balanceKp * error + balanceKi * balanceIntegral + balanceKd * derivative;
+
+    // Adjust wheel speeds based on PID output
+    // Assuming output affects both wheels equally but in opposite directions
+    int32_t leftSpeed = MAX(MIN(leftWheelSpeed + output, MAX_SPEED), MIN_SPEED);
+    int32_t rightSpeed = MAX(MIN(rightWheelSpeed - output, MAX_SPEED), MIN_SPEED);
+
+    if (goBalance == true)
+    {
+        setDirection(currentDirection, leftSpeed, rightSpeed);
+        //*
+        printfUart0("Left = %d   Right = %d   ", leftSpeed, rightSpeed);
+        printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, balanceLastError, balanceIntegral);
+        printfUart0("derivative = %d   output = %d\n", derivative, output);
+        //*/
+    }
+
+    balanceLastError = error; // Save last error for next derivative calculation
+
+    // Clear timer interrupt
+    TIMER1_ICR_R = TIMER_ICR_TATOCINT;
 }
 
 //-----------------------------------------------------------------------------
@@ -993,7 +1078,24 @@ int main(void)
 
         handleButtonAction();
 
-        //readMPU6050Data();
-        //waitMicrosecond(1000000);
+
+
+
+
+        int16_t ax, ay, az, gx, gy, gz;
+        readMPU6050(&ax, &ay, &az, &gx, &gy, &gz); // Read MPU6050 data
+
+        float tiltAngle = calculateTiltAngle(ax, ay, az); // Calculate the tilt angle
+
+        printfUart0("Read Data ax =    %d\n", ax);
+        printfUart0("Read Data ay =    %d\n", ay);
+        printfUart0("Read Data az =    %d\n", az);
+        printfUart0("Read Data gx =    %d\n", gx);
+        printfUart0("Read Data gy =    %d\n", gy);
+        printfUart0("Read Data gz =    %d\n\n", gz);
+
+        printfUart0("tilt Angle   =    %d\n\n", tiltAngle);
+
+        waitMicrosecond(1000000);
     }
 }
