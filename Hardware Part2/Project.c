@@ -909,11 +909,9 @@ void pidISR()
 
 
 // MPU6050 Registers
-#define MPU6050_ADDRESS 0x68
-
 #define MPU6050_PWR_MGMT_1 0x6B
-#define MPU6050_ACCEL_SENSITIVITY 0x1C
-#define MPU6050_GYRO_SENSITIVITY 0x1B
+#define MPU6050_ACCEL_SENSITIVITY 0x1C //
+#define MPU6050_GYRO_SENSITIVITY 0x1B  //
 
 #define MPU6050_OUT_TEMP_H 0x41
 #define MPU6050_OUT_TEMP_L 0x42
@@ -943,6 +941,7 @@ void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy
     *ax = (data[0] << 8) | data[1];
     *ay = (data[2] << 8) | data[3];
     *az = (data[4] << 8) | data[5];
+
     *gx = (data[8] << 8) | data[9];
     *gy = (data[10] << 8) | data[11];
     *gz = (data[12] << 8) | data[13];
@@ -967,7 +966,7 @@ int32_t balanceDeadBand = 0;
 float calculateTiltAngle(int16_t ax, int16_t ay, int16_t az) {
     // Assuming ax, ay, az are the accelerometer readings
     // Calculate the tilt angle (in degrees)
-    float tiltAngle = atan2(ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+    float tiltAngle = atan2(ax, sqrt((ay * ay) + (az * az))) * 180.0 / PI;
     return tiltAngle;
 }
 
@@ -975,6 +974,10 @@ void balancePID()
 {
     int16_t ax, ay, az, gx, gy, gz;
     readMPU6050(&ax, &ay, &az, &gx, &gy, &gz); // Read MPU6050 data
+
+    float fax = (ax/16384.0);
+    float fay = (ay/16384.0);
+    float faz = (az/16384.0);
 
     static int32_t balanceLastError = 0;
 
@@ -1012,6 +1015,43 @@ void balancePID()
     TIMER1_ICR_R = TIMER_ICR_TATOCINT;
 }
 
+// Function to calculate the tilt angle
+float calculateTiltAngle2(int16_t ax, int16_t ay, int16_t az) {
+    // Assuming ax, ay, az are the accelerometer readings
+    // Convert the accelerometer values to g's (9.81 m/s^2)
+    float ax_g = ax / 16384.0; // Assuming +/- 2g sensitivity and 16-bit resolution
+    float az_g = az / 16384.0; // Adjust the divisor based on your MPU6050 configuration
+
+    // Calculate the tilt angle (in degrees)
+    float tiltAngle = atan2(ax_g, az_g) * 180.0 / PI;
+    return tiltAngle;
+}
+
+#define MPU6050_ACCEL_CONFIG 0x1C
+#define MPU6050_GYRO_CONFIG 0x1B
+
+// Function to initialize and configure the MPU6050
+void initMPU6050() {
+    // Wake up the MPU6050 - write 0 to the power management register
+    writeI2c1Register(MPU6050, MPU6050_PWR_MGMT_1, 0x00);
+    waitMicrosecond(10000);
+
+    // Set accelerometer sensitivity to +/- 2g
+    // 0x00 for +/- 2g
+    // 0x08 for +/- 4g
+    // 0x10 for +/- 8g
+    // 0x18 for +/- 16g
+    writeI2c1Register(MPU6050, MPU6050_ACCEL_CONFIG, 0x00);
+
+    // Set gyroscope sensitivity to +/- 250 degrees/second
+    // 0x00 for +/- 250 degrees/sec         = (250 / 360) * 60  = 41.6667  RPM
+    // 0x08 for +/- 500 degrees/sec         = (500 / 360) * 60  = 83.3333  RPM
+    // 0x10 for +/- 1000 degrees/sec        = (1000 / 360) * 60 = 166.6667 RPM
+    // 0x18 for +/- 2000 degrees/sec        = (2000 / 360) * 60 = 333.3333 RPM
+    writeI2c1Register(MPU6050, MPU6050_GYRO_CONFIG, 0x00);
+}
+
+
 //-----------------------------------------------------------------------------
 // Main
 //-----------------------------------------------------------------------------
@@ -1046,9 +1086,10 @@ int main(void)
     }
 
     // START condition (S) on the bus, which is defined as a HIGH-to-LOW transition of the SDA line while SCL line is HIGH
+    initMPU6050();
     //writeI2c1Data(MPU6050, 1);
-    writeI2c1Register(MPU6050, MPU6050_PWR_MGMT_1, 0x00);
-    waitMicrosecond(10000);
+    //writeI2c1Register(MPU6050, MPU6050_PWR_MGMT_1, 0x00);
+    //waitMicrosecond(10000);
 
     // The bus is considered to be busy until the master puts
 
@@ -1081,21 +1122,32 @@ int main(void)
 
 
 
-
+        /*
         int16_t ax, ay, az, gx, gy, gz;
         readMPU6050(&ax, &ay, &az, &gx, &gy, &gz); // Read MPU6050 data
 
-        float tiltAngle = calculateTiltAngle(ax, ay, az); // Calculate the tilt angle
+        //float tiltAngle = calculateTiltAngle(ax, ay, az); // Calculate the tilt angle
+        float tiltAngle = calculateTiltAngle2(ax, ay, az); // Calculate the tilt angle
 
-        printfUart0("Read Data ax =    %d\n", ax);
-        printfUart0("Read Data ay =    %d\n", ay);
-        printfUart0("Read Data az =    %d\n", az);
-        printfUart0("Read Data gx =    %d\n", gx);
-        printfUart0("Read Data gy =    %d\n", gy);
-        printfUart0("Read Data gz =    %d\n\n", gz);
+        float fax = (ax/16384.0);
+        float fay = (ay/16384.0);
+        float faz = (az/16384.0);
+
+        float fgx = (gx/131.0);
+        float fgy = (gy/131.0);
+        float fgz = (gz/131.0);
+
+        printfUart0("Read Data ax =    %f\n", &fax);
+        printfUart0("Read Data ay =    %f\n", &fay);
+        printfUart0("Read Data az =    %f\n\n", &faz);
+
+        printfUart0("Read Data gx =    %f\n", &fgx);
+        printfUart0("Read Data gy =    %f\n", &fgy);
+        printfUart0("Read Data gz =    %f\n\n", &fgz);
 
         printfUart0("tilt Angle   =    %d\n\n", tiltAngle);
+        */
 
-        waitMicrosecond(1000000);
+        //waitMicrosecond(1000000);
     }
 }
