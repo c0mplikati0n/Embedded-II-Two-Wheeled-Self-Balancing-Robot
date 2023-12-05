@@ -144,6 +144,10 @@ int32_t rightWheelDistanceTraveled = 0;
 int16_t ax, ay, az, gx, gy, gz;
 float fax, fay, faz, fgx, fgy, fgz;
 
+float velocityX = 0.0, velocityY = 0.0, velocityZ = 0.0;
+float distanceX = 0.0, distanceY = 0.0, distanceZ = 0.0;
+uint32_t lastSensorReadTime = 0;
+
 float currentGyroRotation = 0.0; // Total rotation angle in degrees
 
 bool isMovingCommand = false;
@@ -245,7 +249,7 @@ void enableTimerMode()
     WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
 
-    /*
+    ///*
     // Enable clock to WTIMER2
     //WTIMER2_CTL_R &= ~TIMER_CTL_TAEN;
     //WTIMER2_CFG_R = 0x00;
@@ -261,7 +265,7 @@ void enableTimerMode()
     //WTIMER2_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
     WTIMER2_TAV_R = 0;                               // zero counter for first period
     WTIMER2_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
-    */
+    //*/
 
 
     // Time in Seconds = (load / 40,000,000)
@@ -836,24 +840,21 @@ void handleButtonAction(void)
             if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Forward \n");
-                // Reset distance and start moving
                 isMovingCommand = true;
                 goBalance = false;
-                //amRotate = true;
-                distanceTraveledX = 0.0;
-                //goStraight = true;
+                distanceX = 0.0; // Reset distance
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 actionHeldExecuted = true;
             }
             else
             {
-                printfUart0("FORWARD_1M: Currently traveled: %f meters.\n", &distanceTraveledX);
-                if (fabs(distanceTraveledX) >= 1.0)
+                //readMPU6050(); // Update distance calculation
+                printfUart0("FORWARD_1M: Distance traveled: %f meters.\n", &distanceX);
+                if (fabs(distanceX) >= 1.0)
                 {
                     printfUart0("Finished Moving 1 Meter Forward \n");
                     goBalance = true;
                     turnOffAll();
-                    //amRotate = false;
                     currentButtonAction = NONE;
                     actionHeldExecuted = false;
                 }
@@ -865,20 +866,15 @@ void handleButtonAction(void)
                 printfUart0("Starting Moving 1 Meter Backward \n");
                 isMovingCommand = true;
                 goBalance = false;
+                distanceX = 0.0; // Reset distance
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 actionHeldExecuted = true;
-                distanceTraveledX = 0.0; // Reset distance
-                lastAx = 0.0; // Reset last acceleration
             }
             else
             {
-                //readMPU6050(); // Read new acceleration data
-                float deltaTime = 0.025; // Assuming a read rate of 40Hz (every 25ms)
-                distanceTraveledX += ((fax + lastAx) / 2) * deltaTime * deltaTime;
-                lastAx = fax; // Update last acceleration
-                printfUart0("BACK_1M: Currently traveled: %f meters.\n", &distanceTraveledX);
-
-                if (fabs(distanceTraveledX) >= 1.0)
+                //readMPU6050(); // Update distance calculation
+                printfUart0("BACK_1M: Distance traveled: %f meters.\n", &distanceX);
+                if (fabs(distanceX) >= 1.0)
                 {
                     printfUart0("Finished Moving 1 Meter Backward \n");
                     goBalance = true;
@@ -1025,6 +1021,7 @@ void pidISR()
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
         /*
         printfUart0("ax: %f  ay: %f  az: %f  gx: %f  gy: %f  gz: %f\n", &fax, &fay , &faz, &fgx, &fgy, &fgz);
+
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %f   LastError = %f   Integral = %d   ", &gyroError, &lastGyroError, integral);
         printfUart0("derivative = %f   output = %d \n", &derivative, output);
@@ -1066,6 +1063,7 @@ void readMPU6050()
     fgy = (gy/131.0);
     fgz = (gz/131.0);
 
+    /*
     // Calculate the change in acceleration
     float deltaX = (fax - lastAx);
     float deltaY = (fay - lastAy);
@@ -1082,6 +1080,33 @@ void readMPU6050()
     lastAx = fax;
     lastAy = fay;
     lastAz = faz;
+    */
+
+    // Calculate deltaTime in seconds
+    float currentTime = (WTIMER2_TAV_R/40000000); // time in seconds
+    float deltaTime = (currentTime - lastSensorReadTime);
+    lastSensorReadTime = currentTime;
+
+    // Subtract gravity component from acceleration (assuming Z axis points up)
+    // You may need to adjust this based on your MPU6050 mounting orientation
+    float accelerationX = fax; // Assuming fax, fay, faz are in g's and need conversion to m/s^2
+    float accelerationY = fay;
+    float accelerationZ = faz - 1.0; // Subtract 1g for gravity
+
+    // Convert acceleration to m/s²
+    accelerationX *= 9.81;
+    accelerationY *= 9.81;
+    accelerationZ *= 9.81;
+
+    // Integrate acceleration to get velocity
+    velocityX += accelerationX * deltaTime;
+    velocityY += accelerationY * deltaTime;
+    velocityZ += accelerationZ * deltaTime;
+
+    // Integrate velocity to get distance
+    distanceX += velocityX * deltaTime;
+    distanceY += velocityY * deltaTime;
+    distanceZ += velocityZ * deltaTime;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
