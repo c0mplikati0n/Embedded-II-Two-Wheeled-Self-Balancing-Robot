@@ -125,8 +125,11 @@ uint32_t noSignalCounter = 0;
 bool actionHeldExecuted = false;
 bool actionReleasedExecuted = false;
 
-bool goStraight = false;
-bool goBalance = false;
+bool goStraight = false;    // if true robot will go straight
+bool goBalance = true;      // if true robot will balance
+
+bool amRotate = false;
+
 
 uint16_t leftWheelSpeed;
 uint16_t rightWheelSpeed;
@@ -265,7 +268,7 @@ void enableTimerMode()
     TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER2_TAILR_R = 100000;                          // set load value to 40000 for 1000 Hz interrupt rate
+    TIMER2_TAILR_R = 40000;                          // set load value to 40000 for 1000 Hz interrupt rate / once per ms
     TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
     NVIC_EN0_R = 1 << (INT_TIMER2A-16);              // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
@@ -574,6 +577,7 @@ void handleButtonAction(void)
         case BACK_SLOW:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
@@ -585,6 +589,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -596,6 +601,7 @@ void handleButtonAction(void)
         case ROTATE_LEFT_B:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setPwmDutyCycle(0, 0, 1023); // Left wheel moves backwards
                 waitMicrosecond(100000);
                 setPwmDutyCycle(0, 0, 850); // Left wheel moves backwards
@@ -604,6 +610,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -612,6 +619,7 @@ void handleButtonAction(void)
         case ROTATE_LEFT_F:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setPwmDutyCycle(0, 1023, 0); // Left wheel moves forward
                 waitMicrosecond(100000);
                 setPwmDutyCycle(0, 850, 0); // Left wheel moves forward
@@ -620,6 +628,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -628,6 +637,7 @@ void handleButtonAction(void)
         case ROTATE_RIGHT_B:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setPwmDutyCycle(1, 1023, 0); // Right wheel moves backwards
                 waitMicrosecond(100000);
                 setPwmDutyCycle(1, 850, 0); // Right wheel moves backwards
@@ -636,6 +646,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -644,6 +655,7 @@ void handleButtonAction(void)
         case ROTATE_RIGHT_F:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setPwmDutyCycle(1, 0, 1023); // Right Wheel moves forward
                 waitMicrosecond(100000);
                 setPwmDutyCycle(1, 0, 850); // Right Wheel moves forward
@@ -652,6 +664,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -661,12 +674,14 @@ void handleButtonAction(void)
         case ROTATE_CW_90:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 rotate(90, true);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -675,12 +690,14 @@ void handleButtonAction(void)
         case ROTATE_CW_180:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 rotate(180, true);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -689,12 +706,14 @@ void handleButtonAction(void)
         case ROTATE_CCW_90:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 rotate(90, false);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -703,12 +722,14 @@ void handleButtonAction(void)
         case ROTATE_CCW_180:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 rotate(180, false);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -718,12 +739,14 @@ void handleButtonAction(void)
         case SPINNING_BOI_1:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                setDirectionOld(0, 0, 900, 0, 900);
+                amRotate = true;
+                setDirectionOld(0, 0, 850, 0, 850);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -732,12 +755,14 @@ void handleButtonAction(void)
         case SPINNING_BOI_2:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                setDirectionOld(0, 900, 0, 900, 0);
+                amRotate = true;
+                setDirectionOld(0, 850, 0, 850, 0);
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                amRotate = false;
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -816,30 +841,6 @@ void wideTimer5Isr()
     WTIMER5_ICR_R = TIMER_ICR_CAECINT;
 }
 
-/*
-void goStraightISR()
-{
-    if((currentButtonState != BUTTON_RELEASED) && (goStraight == true))
-    {
-        int interruptDifference = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
-
-        // Adjust the speed of the wheels based on the difference in interrupts
-        if (interruptDifference > 5)
-        {
-            // Left wheel has more interrupts, slow it down
-            setDirection(currentDirection, (leftWheelSpeed - 100), rightWheelSpeed);
-        }
-        else if (interruptDifference < 0)
-        {
-            // Right wheel has more interrupts, slow it down
-            setDirection(currentDirection, leftWheelSpeed, (rightWheelSpeed - 100));
-        }
-        // If interruptDifference is 0, both wheels are moving at the same speed, so no change is needed
-    }
-    TIMER2_ICR_R = TIMER_ICR_TATOCINT; // Clear timer interrupt
-}
-*/
-
 // pid calculation of u
 float coeffKp = 10; // Proportional coefficient
 float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
@@ -850,7 +851,7 @@ int32_t coeffKo = 0;
 int32_t integral = 0;
 int32_t iMax = 100; // 100
 int32_t diff;
-int32_t error;
+//int32_t error;
 int32_t u = 0;
 int32_t deadBand = 0;
 
@@ -859,7 +860,10 @@ int32_t prevLeftWheelOpticalInterrupt = 0;
 void pidISR()
 {
     static int32_t lastError = 0;
+    static int32_t lastLeftWheelInterrupt = 0;
+    static int32_t lastRightWheelInterrupt = 0;
 
+    //*
     if (leftWheelOpticalInterrupt - prevLeftWheelOpticalInterrupt > 4) {
         leftWheelOpticalInterrupt = prevLeftWheelOpticalInterrupt;
     } else {
@@ -867,22 +871,16 @@ void pidISR()
     }
 
     if (leftWheelOpticalInterrupt > (rightWheelOpticalInterrupt + 10)) {
-            leftWheelOpticalInterrupt = rightWheelOpticalInterrupt;
+        leftWheelOpticalInterrupt = rightWheelOpticalInterrupt;
     }
+    //*/
 
-    // Calculate error (difference in wheel rotations)
-    error = leftWheelOpticalInterrupt - rightWheelOpticalInterrupt;
+    // Calculate the difference in the number of interrupts since the last check
+    int32_t leftWheelInterruptDelta = leftWheelOpticalInterrupt - lastLeftWheelInterrupt;
+    int32_t rightWheelInterruptDelta = rightWheelOpticalInterrupt - lastRightWheelInterrupt;
 
-    if( error > 0 )
-    {
-      // left motor is turning faster
-      //Serial.println("Turning Right");
-    }
-    else if( error < 0 )
-    {
-      // right motor is turning faster
-      //Serial.println("Turning Left");
-    }
+    // Error is the difference in distance traveled by each wheel
+    int32_t error = leftWheelInterruptDelta - rightWheelInterruptDelta;
 
     // Integral term with windup guard
     integral += error;
@@ -892,15 +890,13 @@ void pidISR()
     // Derivative term
     int32_t derivative = error - lastError;
 
-    // PID calculation
-    int32_t output = (coeffKp * error) + (coeffKi * integral) + (coeffKd * derivative);
+    // PID output
+    int32_t output = coeffKp * error + coeffKi * integral + coeffKd * derivative;
 
-    // Scale down the output to avoid large jumps in speed
-    //output = output / 10; // Adjust this scaling factor as needed
-
-    // Speed limit checks
-    int32_t newLeftSpeed = leftWheelSpeed - output;
-    int32_t newRightSpeed = rightWheelSpeed + output;
+    // Adjusting the motor speed based on PID output
+    // Assuming leftWheelSpeed and rightWheelSpeed are your baseline speeds
+    int32_t newLeftSpeed = leftWheelSpeed + output;   // Adjusting left wheel speed
+    int32_t newRightSpeed = rightWheelSpeed - output; // Adjusting right wheel speed
 
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
@@ -909,21 +905,26 @@ void pidISR()
     if (goStraight == true)
     {
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
-        /*
+
+        // Debugging prints
+        //*
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, lastError, integral);
         printfUart0("derivative = %d   output = %d   ", derivative, output);
         printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
-        */
-
+        //printfUart0("                               LWS = %u   RWS = %u\n", leftWheelSpeed, rightWheelSpeed);
+        //*/
     }
 
-    // Prepare for next iteration
+    // Save the current state for the next iteration
+    lastLeftWheelInterrupt = leftWheelOpticalInterrupt;
+    lastRightWheelInterrupt = rightWheelOpticalInterrupt;
     lastError = error;
 
     // Clear timer interrupt
     TIMER2_ICR_R = TIMER_ICR_TATOCINT;
 }
+
 
 void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz)
 {
@@ -1020,7 +1021,7 @@ void balancePID()
         newLeftSpeed = 0; // Turn off motors when balanced
         newRightSpeed = 0; // Turn off motors when balanced
     }
-    if (goBalance == true)
+    if ((goBalance == true) && (amRotate == false))
     {
         setDirection(direction, newLeftSpeed, newRightSpeed);
         /*
