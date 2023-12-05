@@ -269,7 +269,7 @@ void enableTimerMode()
     TIMER1_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER1_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER1_TAILR_R = 1000000;                        // set load value to 40,000 for 1000 Hz interrupt rate // original was 4,000,000 = 10 Hz
+    TIMER1_TAILR_R = 4500000;                        // set load value to 40,000 for 1000 Hz interrupt rate // original was 4,000,000 = 10 Hz
                                                      // I think 5,000,000 would be good, 8 Hz
                                                      // 1,000,000 = 40 Hz = 25ms
 
@@ -903,24 +903,15 @@ void rotate(uint8_t degrees, bool direction) {
     } else {
         setDirectionOld(0, 1000, 0, 1000, 0);
         currentGyroRotation += degrees; // CW
-        degrees -= 11;
+        degrees -= 14; //bigger number decreases extra movement?
     }
 
     printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
 
-    //uint32_t startTime = (WTIMER2_TAV_R/40);
-    //uint32_t timeout = 2000000;
-
     // Wait until the desired angle is reached
     while (fabs(currentRotation) < (degrees/2))
     {
-        /*
-        if (((WTIMER2_TAV_R/40) - startTime) > timeout) {
-            printfUart0("Rotation timeout\n");
-            break; // Break out of the loop if timeout is reached
-        }
-        */
-        //printfUart0("currentRotation = %f \n", &currentRotation);
+        printfUart0("currentRotation = %f \n", &currentRotation);
         //waitMicrosecond(10000); // 10ms
     }
 
@@ -1006,7 +997,7 @@ void pidISR()
     }
 
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
-    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), 500);
+    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
 
     if (goStraight == true)
     {
@@ -1050,14 +1041,15 @@ void readMPU6050()
     fay = (ay/16384.0);
     faz = (az/16384.0);
 
-    fgx = (gx/131.0);
-    fgy = (gy/131.0);
-    fgz = (gz/131.0);
+    // 2000 deg/sec
+    fgx = (gx/16.4);
+    fgy = (gy/16.4);
+    fgz = (gz/16.4);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float balanceKp = 2; // Proportional coefficient
+float balanceKp = 8; // Proportional coefficient // 2 was working
 float balanceKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float balanceKd = 0; // Derivative coefficient
 
@@ -1079,7 +1071,7 @@ void balancePID()
     currentRotation += fgz * 0.025; // 25ms
 
     float tiltAngle = calculateTiltAngle();
-    int32_t error = 0 - tiltAngle; // Desired angle is 0
+    int32_t error = (-8) - tiltAngle; // Desired angle is 0
 
     balanceIntegral += error;
     if (balanceIntegral > balanceiMax) balanceIntegral = balanceiMax;
@@ -1090,7 +1082,7 @@ void balancePID()
     int32_t output = balanceKp * error + balanceKi * balanceIntegral + balanceKd * derivative;
 
     // Base speed for balancing, may need to tweak this
-    int32_t baseSpeed = 800;
+    int32_t baseSpeed = 700;
 
     if(goStraight == false)
     {
@@ -1098,32 +1090,52 @@ void balancePID()
         rightWheelSpeed = baseSpeed;
     }
 
-    bool direction = (tiltAngle < 0); // Forward for negative tilt, backward for positive tilt
+    bool direction = (tiltAngle < -14); // Forward for negative tilt, backward for positive tilt
 
     // Adjust wheel speeds based on PID output
     int32_t newLeftSpeed = (direction ? leftWheelSpeed + output : leftWheelSpeed - output);
     int32_t newRightSpeed = (direction ? rightWheelSpeed + output : rightWheelSpeed - output);
 
+    //int32_t newLeftSpeed = leftWheelSpeed - output;
+    //int32_t newRightSpeed = rightWheelSpeed - output;
+
+    if (!direction)
+    {
+        newLeftSpeed += 100;
+        newRightSpeed += 100;
+    }
+
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
 
-    float balanceThreshold = 20.0; // Adjust
-    if (((fabs(tiltAngle) < balanceThreshold) || (fabs(tiltAngle) > 80)) && (isMovingCommand == false)) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
+    float balanceThreshold = 0.0; // Adjust // was 20 // decrease makes it stop going back so much
+    float negBalanceThreshold = -18.0; // Adjust // was 20
+    if (fabs(tiltAngle) > 70) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
     {
         newLeftSpeed = 0; // Turn off motors when balanced
         newRightSpeed = 0; // Turn off motors when balanced
+        //goStraight = false;
     }
+    // FORWARDS
+    if ((direction && (tiltAngle > negBalanceThreshold)) || (!direction && (tiltAngle < balanceThreshold)))
+    {
+        newLeftSpeed = 0; // Turn off motors when balanced
+        newRightSpeed = 0; // Turn off motors when balanced
+        //goStraight = false;
+    }
+
     if ((goBalance == true) && (amRotate == false))
     {
         setDirection(direction, newLeftSpeed, newRightSpeed);
-        /*
-        printfUart0("ax: %f  ay: %f  az: %f  gx: %f  gy: %f  gz: %f  Tilt Angle = %f\n", &fax, &fay , &faz, &fgx, &fgy, &fgz, &tiltAngle);
-
+        //goStraight = true;
+        ///*
+        //printfUart0("ax: %f  ay: %f  az: %f  gx: %f  gy: %f  gz: %f  Tilt Angle = %f\n", &fax, &fay , &faz, &fgx, &fgy, &fgz, &tiltAngle);
+        //*
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, balanceLastError, balanceIntegral);
         printfUart0("derivative = %d   output = %d\n", derivative, output);
-        waitMicrosecond(100000);
-        */
+        //waitMicrosecond(100000);
+        //*/
         //printfUart0("Left = %d   Right = %d\n", newLeftSpeed, newRightSpeed);
     }
 
@@ -1154,7 +1166,7 @@ void initMPU6050()
     // 0x08 for +/- 500 deg/sec         = (500 / 360) * 60  = 83.3333  RPM
     // 0x10 for +/- 1000 deg/sec        = (1000 / 360) * 60 = 166.6667 RPM
     // 0x18 for +/- 2000 deg/sec        = (2000 / 360) * 60 = 333.3333 RPM
-    writeI2c1Register(MPU6050, 0x1B, 0x00);
+    writeI2c1Register(MPU6050, 0x1B, 0x18);
 }
 
 

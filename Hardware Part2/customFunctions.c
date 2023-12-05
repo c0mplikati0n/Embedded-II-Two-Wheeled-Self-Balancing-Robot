@@ -62,6 +62,21 @@ void readNprintMPU6050(void)
     printfUart0("tilt Angle   =    %f\n\n", &tiltAngle);
 }
 
+// 250 deg/sec
+//fgx = (gx/131.0);
+//fgy = (gy/131.0);
+//fgz = (gz/131.0);
+
+// 1000 deg/sec
+//fgx = (gx/32.8);
+//fgy = (gy/32.8);
+//fgz = (gz/32.8);
+
+// 2000 deg/sec
+//fgx = (gx/16.4);
+//fgy = (gy/16.4);
+//fgz = (gz/16.4);
+
 /*
 float coeffKp = 10;  // Proportional coefficient
 float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
