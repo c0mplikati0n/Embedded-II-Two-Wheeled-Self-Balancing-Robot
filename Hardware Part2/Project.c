@@ -1,3 +1,6 @@
+// Implementing I2C direction thingy, and wheel sensors that make it go straight
+// Xavier A. Portillo-Catalan
+// UTA ID: 1001779115
 
 //-----------------------------------------------------------------------------
 // Hardware Target
@@ -144,9 +147,8 @@ int32_t rightWheelDistanceTraveled = 0;
 int16_t ax, ay, az, gx, gy, gz;
 float fax, fay, faz, fgx, fgy, fgz;
 
-float velocityX = 0.0, velocityY = 0.0, velocityZ = 0.0;
-float distanceX = 0.0, distanceY = 0.0, distanceZ = 0.0;
-uint32_t lastSensorReadTime = 0;
+float velocityX, velocityY, velocityZ;
+float distanceX, distanceY, distanceZ;
 
 float currentGyroRotation = 0.0; // Total rotation angle in degrees
 
@@ -250,19 +252,11 @@ void enableTimerMode()
     NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
 
     ///*
-    // Enable clock to WTIMER2
-    //WTIMER2_CTL_R &= ~TIMER_CTL_TAEN;
-    //WTIMER2_CFG_R = 0x00;
-    //WTIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;
-    //WTIMER2_TAV_R = 0;
-    //WTIMER2_CTL_R |= TIMER_CTL_TAEN;
-
     // Using WT2CCP0 for Timing stuff
     WTIMER2_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
     WTIMER2_CFG_R = 4;                               // configure as 32-bit counter (A only)
     WTIMER2_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
     WTIMER2_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from negative edge to negative edge
-    //WTIMER2_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
     WTIMER2_TAV_R = 0;                               // zero counter for first period
     WTIMER2_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     //*/
@@ -344,12 +338,12 @@ void IRdecoder(void) //fine tweak still
         break;
 
         case NEC_DATA:
-            if(pulseWidth >= 1 && pulseWidth <= 1200) // '0'
+            if(pulseWidth >= 1 && pulseWidth <= 1200) // 0
             {
                 data <<= 1;
                 bitCount++;
             }
-            else if(pulseWidth >= 1200 && pulseWidth <= 3050) // Adjusted tolerance for '1'
+            else if(pulseWidth >= 1200 && pulseWidth <= 3050) // Adjusted tolerance for 1
             {
                 data <<= 1;
                 data |= 1;
@@ -479,14 +473,14 @@ void processDecodedData(uint32_t data)
 
         case FORWARD_1M:
             currentButtonAction = FORWARD_1M;
-            leftWheelSpeed = 950;
-            rightWheelSpeed = 950;
+            leftWheelSpeed = 850;
+            rightWheelSpeed = 850;
             currentDirection = 1;
         break;
         case BACK_1M:
             currentButtonAction = BACK_1M;
-            leftWheelSpeed = 950;
-            rightWheelSpeed = 950;
+            leftWheelSpeed = 1000;
+            rightWheelSpeed = 1000;
             currentDirection = 0;
         break;
         // Handle other buttons similarly when you have their decoded data
@@ -504,8 +498,9 @@ void handleButtonAction(void)
     {
         case NONE:
             // We aint doin nothin brub
-            actionHeldExecuted = false;
-            actionReleasedExecuted = false;
+            //actionHeldExecuted = false;
+            //actionReleasedExecuted = false;
+            goStraight = false;
 
         break;
 
@@ -840,20 +835,20 @@ void handleButtonAction(void)
             if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Forward \n");
-                isMovingCommand = true;
+                //isMovingCommand = true;
+                goStraight = true;
                 goBalance = false;
-                distanceX = 0.0; // Reset distance
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
+                WTIMER2_TAV_R = 0;
                 actionHeldExecuted = true;
             }
             else
             {
-                //readMPU6050(); // Update distance calculation
-                printfUart0("FORWARD_1M: Distance traveled: %f meters.\n", &distanceX);
-                if (fabs(distanceX) >= 1.0)
+                if ((WTIMER2_TAV_R/40000000) >= 2.0)
                 {
                     printfUart0("Finished Moving 1 Meter Forward \n");
                     goBalance = true;
+                    goStraight = false;
                     turnOffAll();
                     currentButtonAction = NONE;
                     actionHeldExecuted = false;
@@ -864,20 +859,20 @@ void handleButtonAction(void)
             if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Backward \n");
-                isMovingCommand = true;
+                //isMovingCommand = true;
+                goStraight = true;
                 goBalance = false;
-                distanceX = 0.0; // Reset distance
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
+                WTIMER2_TAV_R = 0;
                 actionHeldExecuted = true;
             }
             else
             {
-                //readMPU6050(); // Update distance calculation
-                printfUart0("BACK_1M: Distance traveled: %f meters.\n", &distanceX);
-                if (fabs(distanceX) >= 1.0)
+                if ((WTIMER2_TAV_R/40000000) >= 2.0)
                 {
                     printfUart0("Finished Moving 1 Meter Backward \n");
                     goBalance = true;
+                    goStraight = false;
                     turnOffAll();
                     currentButtonAction = NONE;
                     actionHeldExecuted = false;
@@ -901,21 +896,20 @@ void rotate(uint8_t degrees, bool direction) {
 
     amRotate = true;
 
-    // Set wheel speeds for rotation
     if (direction) {
         setDirectionOld(0, 0, 1000, 0, 1000);
         currentGyroRotation -= degrees; //CCW
-        degrees -= 2;
+        degrees -= 10;
     } else {
         setDirectionOld(0, 1000, 0, 1000, 0);
         currentGyroRotation += degrees; // CW
-        degrees -= 2;
+        degrees -= 11;
     }
 
     printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
 
-    //uint32_t startTime = (WTIMER2_TAV_R/40); // Capture start time
-    //uint32_t timeout = 2000000; // Set a timeout of 5,000,000 microseconds (5 seconds)
+    //uint32_t startTime = (WTIMER2_TAV_R/40);
+    //uint32_t timeout = 2000000;
 
     // Wait until the desired angle is reached
     while (fabs(currentRotation) < (degrees/2))
@@ -986,10 +980,10 @@ void pidISR()
     int32_t newLeftSpeed;
     int32_t newRightSpeed;
 
-    // Error is the rate of rotation around z-axis (we want this to be zero for straight movement)
-    gyroError = fgz; // fgz is already in degrees per second
+    // Error is the rate of rotation around z axis
+    gyroError = fgz; // deg/sec
 
-    // Implementing a deadband
+    // deadband?
     if (fabs(gyroError) < 5)
     {
         //gyroError = 0;
@@ -1002,7 +996,6 @@ void pidISR()
     float derivative = gyroError - lastGyroError;
     output = coeffKp * gyroError + coeffKi * integral + coeffKd * derivative;
 
-    // Adjusting motor speed based on PID output
     if (currentDirection == 1)
     {
         newLeftSpeed = leftWheelSpeed + output;
@@ -1015,7 +1008,6 @@ void pidISR()
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), 500);
 
-    // Apply new speeds if goStraight is true
     if (goStraight == true)
     {
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
@@ -1030,7 +1022,6 @@ void pidISR()
         */
     }
 
-    // Save the current error for the next iteration
     lastGyroError = gyroError;
 
     // Clear timer interrupt
@@ -1062,51 +1053,6 @@ void readMPU6050()
     fgx = (gx/131.0);
     fgy = (gy/131.0);
     fgz = (gz/131.0);
-
-    /*
-    // Calculate the change in acceleration
-    float deltaX = (fax - lastAx);
-    float deltaY = (fay - lastAy);
-    float deltaZ = (faz - lastAz);
-
-    // Update the total distance traveled
-    // Assuming constant time interval (deltaTime) between readings
-    float deltaTime = 0.025; // 25 milliseconds
-    distanceTraveledX += deltaX * deltaTime * deltaTime;
-    distanceTraveledY += deltaY * deltaTime * deltaTime;
-    distanceTraveledZ += deltaZ * deltaTime * deltaTime;
-
-    // Update the last acceleration values
-    lastAx = fax;
-    lastAy = fay;
-    lastAz = faz;
-    */
-
-    // Calculate deltaTime in seconds
-    float currentTime = (WTIMER2_TAV_R/40000000); // time in seconds
-    float deltaTime = (currentTime - lastSensorReadTime);
-    lastSensorReadTime = currentTime;
-
-    // Subtract gravity component from acceleration (assuming Z axis points up)
-    // You may need to adjust this based on your MPU6050 mounting orientation
-    float accelerationX = fax; // Assuming fax, fay, faz are in g's and need conversion to m/s^2
-    float accelerationY = fay;
-    float accelerationZ = faz - 1.0; // Subtract 1g for gravity
-
-    // Convert acceleration to m/s²
-    accelerationX *= 9.81;
-    accelerationY *= 9.81;
-    accelerationZ *= 9.81;
-
-    // Integrate acceleration to get velocity
-    velocityX += accelerationX * deltaTime;
-    velocityY += accelerationY * deltaTime;
-    velocityZ += accelerationZ * deltaTime;
-
-    // Integrate velocity to get distance
-    distanceX += velocityX * deltaTime;
-    distanceY += velocityY * deltaTime;
-    distanceZ += velocityZ * deltaTime;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1117,8 +1063,6 @@ float balanceKd = 0; // Derivative coefficient
 
 int32_t balanceIntegral = 0;
 int32_t balanceiMax = 100; // 100
-int32_t balanceError;
-int32_t balanceDeadBand = 0;
 
 float calculateTiltAngle()
 {
@@ -1132,13 +1076,11 @@ void balancePID()
 
     readMPU6050();
 
-    // Assuming gyroscope data is in degrees per second and balancePID is called every 25ms
-    currentRotation += fgz * 0.025; // 0.025 is the time in seconds (25ms)
+    currentRotation += fgz * 0.025; // 25ms
 
     float tiltAngle = calculateTiltAngle();
-    int32_t error = 0 - tiltAngle; // Desired angle is 0 (upright)
+    int32_t error = 0 - tiltAngle; // Desired angle is 0
 
-    // Update integral and derivative terms
     balanceIntegral += error;
     if (balanceIntegral > balanceiMax) balanceIntegral = balanceiMax;
     if (balanceIntegral < -balanceiMax) balanceIntegral = -balanceiMax;
@@ -1147,8 +1089,8 @@ void balancePID()
 
     int32_t output = balanceKp * error + balanceKi * balanceIntegral + balanceKd * derivative;
 
-    // Determine the base speed for balancing, you may need to tweak this
-    int32_t baseSpeed = 800; // Example base speed
+    // Base speed for balancing, may need to tweak this
+    int32_t baseSpeed = 800;
 
     if(goStraight == false)
     {
@@ -1156,7 +1098,6 @@ void balancePID()
         rightWheelSpeed = baseSpeed;
     }
 
-    // Determine direction based on tilt
     bool direction = (tiltAngle < 0); // Forward for negative tilt, backward for positive tilt
 
     // Adjust wheel speeds based on PID output
@@ -1166,8 +1107,7 @@ void balancePID()
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
 
-    // Check if the robot is balanced (tilt angle within a small threshold)
-    float balanceThreshold = 20.0; // Adjust this threshold as needed
+    float balanceThreshold = 20.0; // Adjust
     if (((fabs(tiltAngle) < balanceThreshold) || (fabs(tiltAngle) > 80)) && (isMovingCommand == false)) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
     {
         newLeftSpeed = 0; // Turn off motors when balanced
@@ -1202,18 +1142,18 @@ void initMPU6050()
     writeI2c1Register(MPU6050, 0x6B, 0x00);
     waitMicrosecond(10000);
 
-    // Set accelerometer sensitivity to +/- 2g
+    // Set sensitivity to 2g
     // 0x00 for +/- 2g
     // 0x08 for +/- 4g
     // 0x10 for +/- 8g
     // 0x18 for +/- 16g
     writeI2c1Register(MPU6050, 0x1C, 0x00);
 
-    // Set gyroscope sensitivity to +/- 250 degrees/second
-    // 0x00 for +/- 250 degrees/sec         = (250 / 360) * 60  = 41.6667  RPM
-    // 0x08 for +/- 500 degrees/sec         = (500 / 360) * 60  = 83.3333  RPM
-    // 0x10 for +/- 1000 degrees/sec        = (1000 / 360) * 60 = 166.6667 RPM
-    // 0x18 for +/- 2000 degrees/sec        = (2000 / 360) * 60 = 333.3333 RPM
+    // Set sensitivity to 250 degrees/second
+    // 0x00 for +/- 250 deg/sec         = (250 / 360) * 60  = 41.6667  RPM
+    // 0x08 for +/- 500 deg/sec         = (500 / 360) * 60  = 83.3333  RPM
+    // 0x10 for +/- 1000 deg/sec        = (1000 / 360) * 60 = 166.6667 RPM
+    // 0x18 for +/- 2000 deg/sec        = (2000 / 360) * 60 = 333.3333 RPM
     writeI2c1Register(MPU6050, 0x1B, 0x00);
 }
 
@@ -1263,7 +1203,7 @@ int main(void)
 
             //leftWheelOpticalInterrupt = 0;
             //rightWheelOpticalInterrupt = 0;
-            goStraight = false;
+            //goStraight = false;
         }
 
         handleButtonAction();
