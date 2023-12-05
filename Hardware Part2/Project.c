@@ -95,7 +95,10 @@ typedef enum
     SPINNING_BOI_1 = 16718565,
     SPINNING_BOI_2 = 16751205,
 
-    BALANCE = 16712445
+    BALANCE        = 167124459, // remove the 9 to reactivate
+
+    FORWARD_1M     = 16726725,
+    BACK_1M        = 16759365
     // Add other buttons
 } ButtonAction;
 
@@ -142,6 +145,15 @@ int32_t rightWheelDistanceTraveled = 0;
 
 int16_t ax, ay, az, gx, gy, gz;
 
+float currentGyroRotation = 0.0; // Total rotation angle in degrees
+
+float distanceTraveledX = 0.0;
+float distanceTraveledY = 0.0;
+float distanceTraveledZ = 0.0;
+float lastAx = 0.0;
+float lastAy = 0.0;
+float lastAz = 0.0;
+
 //-----------------------------------------------------------------------------
 // Subroutines
 //-----------------------------------------------------------------------------
@@ -149,6 +161,7 @@ int16_t ax, ay, az, gx, gy, gz;
 void processDecodedData(uint32_t data);
 void handleButtonAction(void);
 void rotate(uint8_t degrees, bool direction);
+void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz);
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -230,6 +243,25 @@ void enableTimerMode()
     WTIMER5_TAV_R = 0;                               // zero counter for first period
     WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
+
+    /*
+    // Enable clock to WTIMER2
+    //WTIMER2_CTL_R &= ~TIMER_CTL_TAEN;
+    //WTIMER2_CFG_R = 0x00;
+    //WTIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;
+    //WTIMER2_TAV_R = 0;
+    //WTIMER2_CTL_R |= TIMER_CTL_TAEN;
+
+    // Using WT2CCP0 for Timing stuff
+    WTIMER2_CTL_R &= ~TIMER_CTL_TAEN;                // turn-off counter before reconfiguring
+    WTIMER2_CFG_R = 4;                               // configure as 32-bit counter (A only)
+    WTIMER2_TAMR_R = TIMER_TAMR_TACMR | TIMER_TAMR_TAMR_CAP | TIMER_TAMR_TACDIR; // configure for edge time mode, count up
+    WTIMER2_CTL_R = TIMER_CTL_TAEVENT_POS;           // measure time from negative edge to negative edge
+    //WTIMER2_IMR_R = TIMER_IMR_CAEIM;                 // turn-on interrupts
+    WTIMER2_TAV_R = 0;                               // zero counter for first period
+    WTIMER2_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
+    */
+
 
     // Time in Seconds = (load / 40,000,000)
     // Hz = (40,000,000 / load)
@@ -326,7 +358,7 @@ void IRdecoder(void) //fine tweak still
 
             if(bitCount == 31)
             {
-                printfUart0("Decoded Data: %u\n", data);
+                printfUart0("\nDecoded Data: %u\n", data);
                 lastDecodedData = data;
                 processDecodedData(data);
                 currentState = NEC_IDLE;
@@ -439,6 +471,13 @@ void processDecodedData(uint32_t data)
         case BALANCE:
             currentButtonAction = BALANCE;
         break;
+
+        case FORWARD_1M:
+            currentButtonAction = FORWARD_1M;
+        break;
+        case BACK_1M:
+            currentButtonAction = BACK_1M;
+        break;
         // Handle other buttons similarly when you have their decoded data
         default:
             currentButtonAction = NONE;
@@ -456,6 +495,7 @@ void handleButtonAction(void)
             // We aint doin nothin brub
             actionHeldExecuted = false;
             actionReleasedExecuted = false;
+
         break;
 
         case FORWARD_FAST:
@@ -463,6 +503,8 @@ void handleButtonAction(void)
             {
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -524,6 +566,8 @@ void handleButtonAction(void)
             {
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
                 actionHeldExecuted = true;
                 actionReleasedExecuted = false;
             }
@@ -535,7 +579,7 @@ void handleButtonAction(void)
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
                 //currentButtonState = BUTTON_RELEASED;
-                                //currentButtonAction = NONE;
+                //currentButtonAction = NONE;
             }
         break;
         case BACK_NORMAL:
@@ -556,7 +600,7 @@ void handleButtonAction(void)
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
                 //currentButtonState = BUTTON_RELEASED;
-                                //currentButtonAction = NONE;
+                //currentButtonAction = NONE;
             }
         break;
         case BACK_SLOW:
@@ -579,7 +623,7 @@ void handleButtonAction(void)
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
                 //currentButtonState = BUTTON_RELEASED;
-                                //currentButtonAction = NONE;
+                //currentButtonAction = NONE;
             }
         break;
 
@@ -771,6 +815,50 @@ void handleButtonAction(void)
             }
         break;
 
+        case FORWARD_1M:
+            if (!actionHeldExecuted)  // Start moving if not already started
+            {
+                printfUart0("Starting Moving 1 Meter Forward \n");
+                setDirection(1, 1000, 1000);  // Move forward at a suitable speed
+                //amRotate = true;
+                actionHeldExecuted = true;
+                goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
+            }
+            else if ((leftWheelOpticalInterrupt/2) >= 100 || (rightWheelOpticalInterrupt/2) >= 100)  // Stop after 1 meter
+            {
+                printfUart0("Finished Moving 1 Meter Forward \n");
+                printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
+                turnOffAll();
+                currentButtonAction = NONE;
+                actionHeldExecuted = false;
+                //amRotate = false;
+            }
+        break;
+
+        case BACK_1M:
+            if (!actionHeldExecuted)  // Start moving if not already started
+            {
+                printfUart0("Starting Moving 1 Meter Backward \n");
+                setDirection(0, 1000, 1000);  // Move backward at a suitable speed
+                //amRotate = true;
+                actionHeldExecuted = true;
+                goStraight = true;
+                leftWheelOpticalInterrupt = 0;
+                rightWheelOpticalInterrupt = 0;
+            }
+            else if ((leftWheelOpticalInterrupt/2) >= 100 || (rightWheelOpticalInterrupt/2) >= 100)  // Stop after 1 meter
+            {
+                printfUart0("Finished Moving 1 Meter Backward \n");
+                printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
+                turnOffAll();
+                currentButtonAction = NONE;
+                actionHeldExecuted = false;
+                //amRotate = false;
+            }
+        break;
+
         default:
             turnOffAll();
         break;
@@ -780,28 +868,65 @@ void handleButtonAction(void)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 volatile float currentRotation = 0.0; // Total rotation angle in degrees
+//volatile float currentGyroRotation = 0.0; // Total rotation angle in degrees
 
 void rotate(uint8_t degrees, bool direction) {
     // Reset rotation angle
     currentRotation = 0.0;
 
+    amRotate = true;
+
     // Set wheel speeds for rotation
     if (direction) {
         setDirectionOld(0, 0, 1000, 0, 1000);
-        //setDirectionOld(0, 850, 0, 850, 0);
+        currentGyroRotation -= degrees; //CCW
+        degrees -= 8;
     } else {
         setDirectionOld(0, 1000, 0, 1000, 0);
-        //setDirectionOld(0, 0, 850, 0, 850);
+        currentGyroRotation += degrees; // CW
+        //degrees -= 2;
     }
+
+    printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
+
+    //uint32_t startTime = (WTIMER2_TAV_R/40); // Capture start time
+    //uint32_t timeout = 2000000; // Set a timeout of 5,000,000 microseconds (5 seconds)
 
     // Wait until the desired angle is reached
-    while (fabs(currentRotation) < degrees)
+    while (fabs(currentRotation) < (degrees/2))
     {
-        printfUart0("currentRotation = %f \n", &currentRotation);
-        waitMicrosecond(10000); // 10ms
+        /*
+        if (((WTIMER2_TAV_R/40) - startTime) > timeout) {
+            printfUart0("Rotation timeout\n");
+            break; // Break out of the loop if timeout is reached
+        }
+        */
+        //printfUart0("currentRotation = %f \n", &currentRotation);
+        //waitMicrosecond(10000); // 10ms
     }
 
+    /*
+    // Correction phase // Not fully Working
+    if (fabs(currentRotation) > (degrees / 2)) {
+        // Reverse the direction of rotation to correct
+        if (direction) {
+            setDirectionOld(0, 900, 0, 900, 0);
+        } else {
+            setDirectionOld(0, 0, 900, 0, 900);
+        }
+
+        // Wait until the rotation is close to the desired angle
+        while (fabs(currentRotation) > (degrees / 2))
+        {
+            // Update rotation based on gyro data
+            //printfUart0("Correcting currentRotation = %f \n", &currentRotation);
+            //waitMicrosecond(10000); // 10ms
+        }
+    }
+    */
+
     turnOffAll();
+    amRotate = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -812,7 +937,7 @@ void wideTimer1Isr()
     leftWheelOpticalInterrupt++;
     leftWheelDistanceTraveled = leftWheelOpticalInterrupt;
     //printfUart0("left Wheel Optical Interrupt:  %d \n", leftWheelOpticalInterrupt);
-    if(rightWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
+    if(leftWheelOpticalInterrupt == 40) // 40 tabs on wheel // 1 tab detected = 1 cm
     {
         //rightWheelOpticalInterrupt = 0;
         //printfUart0("left Wheel Full Rotation\n");
@@ -962,6 +1087,7 @@ void balancePID()
     // Assuming gyroscope data is in degrees per second and balancePID is called every 25ms
     currentRotation += (gz / 131.0) * 0.025; // 0.025 is the time in seconds (25ms)
 
+    /*
     float fax = (ax/16384.0);
     float fay = (ay/16384.0);
     float faz = (az/16384.0);
@@ -969,6 +1095,7 @@ void balancePID()
     float fgx = (gx/131.0);
     float fgy = (gy/131.0);
     float fgz = (gz/131.0);
+    */
 
     float tiltAngle = calculateTiltAngle(ax, ay, az);
     int32_t error = 0 - tiltAngle; // Desired angle is 0 (upright)
@@ -1094,8 +1221,8 @@ int main(void)
             currentButtonState = BUTTON_RELEASED;
             //currentButtonAction = NONE; // this breaks the code
 
-            leftWheelOpticalInterrupt = 0;
-            rightWheelOpticalInterrupt = 0;
+            //leftWheelOpticalInterrupt = 0;
+            //rightWheelOpticalInterrupt = 0;
             goStraight = false;
         }
 
