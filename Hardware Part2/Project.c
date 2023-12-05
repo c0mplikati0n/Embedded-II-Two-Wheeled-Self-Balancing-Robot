@@ -131,8 +131,6 @@ bool goBalance = true;      // if true robot will balance
 
 bool amRotate = false;
 
-
-
 uint16_t leftWheelSpeed;
 uint16_t rightWheelSpeed;
 uint16_t currentDirection;
@@ -147,6 +145,8 @@ int16_t ax, ay, az, gx, gy, gz;
 float fax, fay, faz, fgx, fgy, fgz;
 
 float currentGyroRotation = 0.0; // Total rotation angle in degrees
+
+bool isMovingCommand = false;
 
 float distanceTraveledX = 0.0;
 float distanceTraveledY = 0.0;
@@ -826,52 +826,55 @@ void handleButtonAction(void)
             if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Forward \n");
+                // Reset distance and start moving
+                isMovingCommand = true;
+                goBalance = false;
+                //amRotate = true;
+                distanceTraveledX = 0.0;
+                //goStraight = true;
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
-                goStraight = true;
                 actionHeldExecuted = true;
-                distanceTraveledX = 0.0; // Reset distance
             }
             else
             {
-                printfUart0("FORWARD_1M: Currently traveled: %f meters.\n",& distanceTraveledX);
-                if (fabs(distanceTraveledX) >= 1.0) // Check if traveled 1 meter
+                printfUart0("FORWARD_1M: Currently traveled: %f meters.\n", &distanceTraveledX);
+                if (fabs(distanceTraveledX) >= 1.0)
                 {
                     printfUart0("Finished Moving 1 Meter Forward \n");
+                    goBalance = true;
                     turnOffAll();
+                    //amRotate = false;
                     currentButtonAction = NONE;
                     actionHeldExecuted = false;
                 }
-                else
-                {
-                    // Keep setting direction to ensure continuous movement
-                    setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
-                }
             }
         break;
-
         case BACK_1M:
             if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Backward \n");
+                isMovingCommand = true;
+                goBalance = false;
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
-                goStraight = true;
                 actionHeldExecuted = true;
                 distanceTraveledX = 0.0; // Reset distance
+                lastAx = 0.0; // Reset last acceleration
             }
             else
             {
+                //readMPU6050(); // Read new acceleration data
+                float deltaTime = 0.025; // Assuming a read rate of 40Hz (every 25ms)
+                distanceTraveledX += ((fax + lastAx) / 2) * deltaTime * deltaTime;
+                lastAx = fax; // Update last acceleration
                 printfUart0("BACK_1M: Currently traveled: %f meters.\n", &distanceTraveledX);
-                if (fabs(distanceTraveledX) >= 1.0) // Check if traveled 1 meter
+
+                if (fabs(distanceTraveledX) >= 1.0)
                 {
                     printfUart0("Finished Moving 1 Meter Backward \n");
+                    goBalance = true;
                     turnOffAll();
                     currentButtonAction = NONE;
                     actionHeldExecuted = false;
-                }
-                else
-                {
-                    // Keep setting direction to ensure continuous movement
-                    setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 }
             }
         break;
@@ -884,8 +887,7 @@ void handleButtonAction(void)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-volatile float currentRotation = 0.0; // Total rotation angle in degrees
-//volatile float currentGyroRotation = 0.0; // Total rotation angle in degrees
+volatile float currentRotation = 0.0;
 
 void rotate(uint8_t degrees, bool direction) {
     // Reset rotation angle
@@ -921,26 +923,6 @@ void rotate(uint8_t degrees, bool direction) {
         //printfUart0("currentRotation = %f \n", &currentRotation);
         //waitMicrosecond(10000); // 10ms
     }
-
-    /*
-    // Correction phase // Not fully Working
-    if (fabs(currentRotation) > (degrees / 2)) {
-        // Reverse the direction of rotation to correct
-        if (direction) {
-            setDirectionOld(0, 900, 0, 900, 0);
-        } else {
-            setDirectionOld(0, 0, 900, 0, 900);
-        }
-
-        // Wait until the rotation is close to the desired angle
-        while (fabs(currentRotation) > (degrees / 2))
-        {
-            // Update rotation based on gyro data
-            //printfUart0("Correcting currentRotation = %f \n", &currentRotation);
-            //waitMicrosecond(10000); // 10ms
-        }
-    }
-    */
 
     turnOffAll();
     amRotate = false;
@@ -1079,12 +1061,19 @@ void readMPU6050()
     fgy = (gy/131.0);
     fgz = (gz/131.0);
 
-    float deltaTime = 0.025; // Assuming this function is called every 25ms
+    // Calculate the change in acceleration
+    float deltaX = (fax - lastAx);
+    float deltaY = (fay - lastAy);
+    float deltaZ = (faz - lastAz);
 
-    distanceTraveledX += 0.5 * (fax + lastAx) * deltaTime * deltaTime;
-    distanceTraveledY += 0.5 * (fay + lastAy) * deltaTime * deltaTime;
-    distanceTraveledZ += 0.5 * (faz + lastAz) * deltaTime * deltaTime;
+    // Update the total distance traveled
+    // Assuming constant time interval (deltaTime) between readings
+    float deltaTime = 0.025; // 25 milliseconds
+    distanceTraveledX += deltaX * deltaTime * deltaTime;
+    distanceTraveledY += deltaY * deltaTime * deltaTime;
+    distanceTraveledZ += deltaZ * deltaTime * deltaTime;
 
+    // Update the last acceleration values
     lastAx = fax;
     lastAy = fay;
     lastAz = faz;
@@ -1149,7 +1138,7 @@ void balancePID()
 
     // Check if the robot is balanced (tilt angle within a small threshold)
     float balanceThreshold = 20.0; // Adjust this threshold as needed
-    if ((fabs(tiltAngle) < balanceThreshold) || (fabs(tiltAngle) > 80)) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
+    if (((fabs(tiltAngle) < balanceThreshold) || (fabs(tiltAngle) > 80)) && (isMovingCommand == false)) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
     {
         newLeftSpeed = 0; // Turn off motors when balanced
         newRightSpeed = 0; // Turn off motors when balanced
@@ -1165,6 +1154,7 @@ void balancePID()
         printfUart0("derivative = %d   output = %d\n", derivative, output);
         waitMicrosecond(100000);
         */
+        //printfUart0("Left = %d   Right = %d\n", newLeftSpeed, newRightSpeed);
     }
 
     balanceLastError = error;
