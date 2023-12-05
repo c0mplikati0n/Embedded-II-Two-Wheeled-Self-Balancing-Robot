@@ -144,6 +144,7 @@ int32_t leftWheelDistanceTraveled = 0;
 int32_t rightWheelDistanceTraveled = 0;
 
 int16_t ax, ay, az, gx, gy, gz;
+float fax, fay, faz, fgx, fgy, fgz;
 
 float currentGyroRotation = 0.0; // Total rotation angle in degrees
 
@@ -161,7 +162,7 @@ float lastAz = 0.0;
 void processDecodedData(uint32_t data);
 void handleButtonAction(void);
 void rotate(uint8_t degrees, bool direction);
-void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz);
+void readMPU6050();
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -474,9 +475,15 @@ void processDecodedData(uint32_t data)
 
         case FORWARD_1M:
             currentButtonAction = FORWARD_1M;
+            leftWheelSpeed = 950;
+            rightWheelSpeed = 950;
+            currentDirection = 1;
         break;
         case BACK_1M:
             currentButtonAction = BACK_1M;
+            leftWheelSpeed = 950;
+            rightWheelSpeed = 950;
+            currentDirection = 0;
         break;
         // Handle other buttons similarly when you have their decoded data
         default:
@@ -816,46 +823,56 @@ void handleButtonAction(void)
         break;
 
         case FORWARD_1M:
-            if (!actionHeldExecuted)  // Start moving if not already started
+            if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Forward \n");
-                setDirection(1, 1000, 1000);  // Move forward at a suitable speed
-                //amRotate = true;
-                actionHeldExecuted = true;
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 goStraight = true;
-                leftWheelOpticalInterrupt = 0;
-                rightWheelOpticalInterrupt = 0;
+                actionHeldExecuted = true;
+                distanceTraveledX = 0.0; // Reset distance
             }
-            else if ((leftWheelOpticalInterrupt/2) >= 100 || (rightWheelOpticalInterrupt/2) >= 100)  // Stop after 1 meter
+            else
             {
-                printfUart0("Finished Moving 1 Meter Forward \n");
-                printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
-                turnOffAll();
-                currentButtonAction = NONE;
-                actionHeldExecuted = false;
-                //amRotate = false;
+                printfUart0("FORWARD_1M: Currently traveled: %f meters.\n",& distanceTraveledX);
+                if (fabs(distanceTraveledX) >= 1.0) // Check if traveled 1 meter
+                {
+                    printfUart0("Finished Moving 1 Meter Forward \n");
+                    turnOffAll();
+                    currentButtonAction = NONE;
+                    actionHeldExecuted = false;
+                }
+                else
+                {
+                    // Keep setting direction to ensure continuous movement
+                    setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
+                }
             }
         break;
 
         case BACK_1M:
-            if (!actionHeldExecuted)  // Start moving if not already started
+            if (!actionHeldExecuted)
             {
                 printfUart0("Starting Moving 1 Meter Backward \n");
-                setDirection(0, 1000, 1000);  // Move backward at a suitable speed
-                //amRotate = true;
-                actionHeldExecuted = true;
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 goStraight = true;
-                leftWheelOpticalInterrupt = 0;
-                rightWheelOpticalInterrupt = 0;
+                actionHeldExecuted = true;
+                distanceTraveledX = 0.0; // Reset distance
             }
-            else if ((leftWheelOpticalInterrupt/2) >= 100 || (rightWheelOpticalInterrupt/2) >= 100)  // Stop after 1 meter
+            else
             {
-                printfUart0("Finished Moving 1 Meter Backward \n");
-                printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
-                turnOffAll();
-                currentButtonAction = NONE;
-                actionHeldExecuted = false;
-                //amRotate = false;
+                printfUart0("BACK_1M: Currently traveled: %f meters.\n", &distanceTraveledX);
+                if (fabs(distanceTraveledX) >= 1.0) // Check if traveled 1 meter
+                {
+                    printfUart0("Finished Moving 1 Meter Backward \n");
+                    turnOffAll();
+                    currentButtonAction = NONE;
+                    actionHeldExecuted = false;
+                }
+                else
+                {
+                    // Keep setting direction to ensure continuous movement
+                    setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed);
+                }
             }
         break;
 
@@ -884,7 +901,7 @@ void rotate(uint8_t degrees, bool direction) {
     } else {
         setDirectionOld(0, 1000, 0, 1000, 0);
         currentGyroRotation += degrees; // CW
-        //degrees -= 2;
+        degrees -= 4;
     }
 
     printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
@@ -972,6 +989,7 @@ int32_t iMax = 100; // 100
 
 int32_t prevLeftWheelOpticalInterrupt = 0;
 
+// Configure Timer 2 for PID controller (Driving Straight)
 void pidISR()
 {
     static int32_t lastError = 0;
@@ -1037,67 +1055,68 @@ void pidISR()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz)
+void readMPU6050()
 {
     uint8_t data[14];
     readI2c1Registers(MPU6050, 0x3B, data, 14);
 
-    *ax = (data[0] << 8) | data[1];
-    *ay = (data[2] << 8) | data[3];
-    *az = (data[4] << 8) | data[5];
+    ax = (data[0] << 8) | data[1];
+    ay = (data[2] << 8) | data[3];
+    az = (data[4] << 8) | data[5];
 
     // data[6] and data[7] are temperature, not needed for now
 
-    *gx = (data[8] << 8) | data[9];
-    *gy = (data[10] << 8) | data[11];
-    *gz = (data[12] << 8) | data[13];
+    gx = (data[8] << 8) | data[9];
+    gy = (data[10] << 8) | data[11];
+    gz = (data[12] << 8) | data[13];
+
+    // Convert to g
+    fax = (ax/16384.0);
+    fay = (ay/16384.0);
+    faz = (az/16384.0);
+
+    fgx = (gx/131.0);
+    fgy = (gy/131.0);
+    fgz = (gz/131.0);
+
+    float deltaTime = 0.025; // Assuming this function is called every 25ms
+
+    distanceTraveledX += 0.5 * (fax + lastAx) * deltaTime * deltaTime;
+    distanceTraveledY += 0.5 * (fay + lastAy) * deltaTime * deltaTime;
+    distanceTraveledZ += 0.5 * (faz + lastAz) * deltaTime * deltaTime;
+
+    lastAx = fax;
+    lastAy = fay;
+    lastAz = faz;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// pid calculation of u
 float balanceKp = 2; // Proportional coefficient
 float balanceKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float balanceKd = 0; // Derivative coefficient
 
-int32_t balanceKo = 0;
-//int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
 int32_t balanceIntegral = 0;
 int32_t balanceiMax = 100; // 100
-int32_t balancediff;
 int32_t balanceError;
-int32_t balanceU = 0;
 int32_t balanceDeadBand = 0;
-//int32_t balanceLastError = 0;
 
-// Function to calculate the tilt angle
-float calculateTiltAngle(int16_t ax, int16_t ay, int16_t az) {
-    float ax_g = ax / 16384.0;  // Assuming +/- 2g sensitivity
-    float az_g = az / 16384.0;
-    return atan2(ax_g, az_g) * 180.0 / PI;
+float calculateTiltAngle()
+{
+    return atan2(fax, faz) * 180.0 / PI;
 }
 
+// Configure Timer 1 for PID controller (Balance)
 void balancePID()
 {
     static int32_t balanceLastError = 0;
 
-    //int16_t ax, ay, az, gx, gy, gz;
-    readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
+    readMPU6050();
 
     // Assuming gyroscope data is in degrees per second and balancePID is called every 25ms
-    currentRotation += (gz / 131.0) * 0.025; // 0.025 is the time in seconds (25ms)
+    currentRotation += fgz * 0.025; // 0.025 is the time in seconds (25ms)
 
-    /*
-    float fax = (ax/16384.0);
-    float fay = (ay/16384.0);
-    float faz = (az/16384.0);
-
-    float fgx = (gx/131.0);
-    float fgy = (gy/131.0);
-    float fgz = (gz/131.0);
-    */
-
-    float tiltAngle = calculateTiltAngle(ax, ay, az);
+    float tiltAngle = calculateTiltAngle();
     int32_t error = 0 - tiltAngle; // Desired angle is 0 (upright)
 
     // Update integral and derivative terms
@@ -1157,8 +1176,9 @@ void balancePID()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Initialize and Configure MPU-6050
-void initMPU6050() {
-    // Wake up the MPU6050 - write 0 to the power management register
+void initMPU6050()
+{
+    // Wake up the MPU6050 - write 0
     writeI2c1Register(MPU6050, 0x6B, 0x00);
     waitMicrosecond(10000);
 
