@@ -273,7 +273,7 @@ void enableTimerMode()
     TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
     TIMER1_TAILR_R = 1000000;                        // set load value to 40,000 for 1000 Hz interrupt rate // original was 4,000,000 = 10 Hz
                                                      // I think 5,000,000 would be good, 8 Hz
-                                                     // 1,000,000 = 40 Hz
+                                                     // 1,000,000 = 40 Hz = 25ms
 
     TIMER1_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
     NVIC_EN0_R = 1 << (INT_TIMER1A-16);              // turn-on interrupt 37 (TIMER1A)
@@ -517,6 +517,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                goStraight = false;
                 slowDown(1, 1023, 1023);
                 turnOffAll();
                 actionReleasedExecuted = true;
@@ -539,6 +540,8 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                goStraight = false;
+                //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -560,11 +563,13 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                goStraight = false;
+                //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
                 //currentButtonState = BUTTON_RELEASED;
-                                //currentButtonAction = NONE;
+                //currentButtonAction = NONE;
             }
         break;
 
@@ -580,6 +585,7 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                goStraight = false;
                 slowDown(0, 1023, 1023);
 
                 turnOffAll();
@@ -603,6 +609,8 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
+                goStraight = false;
+                //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -613,7 +621,7 @@ void handleButtonAction(void)
         case BACK_SLOW:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                amRotate = true;
+                //amRotate = true;
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
@@ -625,7 +633,9 @@ void handleButtonAction(void)
             }
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
-                amRotate = false;
+                goStraight = false;
+                //amRotate = false;
+                //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
                 actionHeldExecuted = false;
@@ -899,11 +909,11 @@ void rotate(uint8_t degrees, bool direction) {
     if (direction) {
         setDirectionOld(0, 0, 1000, 0, 1000);
         currentGyroRotation -= degrees; //CCW
-        degrees -= 8;
+        degrees -= 2;
     } else {
         setDirectionOld(0, 1000, 0, 1000, 0);
         currentGyroRotation += degrees; // CW
-        degrees -= 4;
+        degrees -= 2;
     }
 
     printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
@@ -962,8 +972,8 @@ void wideTimer5Isr()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float coeffKp = 10;  // Proportional coefficient
-float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKp = 2.5;  // Proportional coefficient // 2.5 is okay
+float coeffKi = 0.5; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float coeffKd = 0;   // Derivative coefficient
 
 int32_t integral = 0;
@@ -974,62 +984,57 @@ int32_t prevLeftWheelOpticalInterrupt = 0;
 // Configure Timer 2 for PID controller (Driving Straight)
 void pidISR()
 {
-    static int32_t lastError = 0;
-    static int32_t lastLeftWheelInterrupt = 0;
-    static int32_t lastRightWheelInterrupt = 0;
+    static float lastGyroError = 0;
+    float gyroError;
+    int32_t output;
+    int32_t newLeftSpeed;
+    int32_t newRightSpeed;
 
-    //*
-    if (leftWheelOpticalInterrupt - prevLeftWheelOpticalInterrupt > 4) {
-        leftWheelOpticalInterrupt = prevLeftWheelOpticalInterrupt;
-    } else {
-        prevLeftWheelOpticalInterrupt = leftWheelOpticalInterrupt;
+    // Error is the rate of rotation around z-axis (we want this to be zero for straight movement)
+    gyroError = fgz; // fgz is already in degrees per second
+
+    // Implementing a deadband
+    if (fabs(gyroError) < 5)
+    {
+        //gyroError = 0;
     }
 
-    if (leftWheelOpticalInterrupt > (rightWheelOpticalInterrupt + 10)) {
-        leftWheelOpticalInterrupt = rightWheelOpticalInterrupt;
-    }
-    //*/
-
-    // Calculate the difference in the number of interrupts since the last check
-    int32_t leftWheelInterruptDelta = leftWheelOpticalInterrupt - lastLeftWheelInterrupt;
-    int32_t rightWheelInterruptDelta = rightWheelOpticalInterrupt - lastRightWheelInterrupt;
-
-    // Error is the difference in distance traveled by each wheel
-    int32_t error = leftWheelInterruptDelta - rightWheelInterruptDelta;
-
-    integral += error;
+    integral += gyroError;
     if (integral > iMax) integral = iMax;
     if (integral < -iMax) integral = -iMax;
 
-    int32_t derivative = error - lastError;
+    float derivative = gyroError - lastGyroError;
+    output = coeffKp * gyroError + coeffKi * integral + coeffKd * derivative;
 
-    int32_t output = coeffKp * error + coeffKi * integral + coeffKd * derivative;
-
-    // Adjusting the motor speed based on PID output
-    int32_t newLeftSpeed = leftWheelSpeed + output;
-    int32_t newRightSpeed = rightWheelSpeed - output;
+    // Adjusting motor speed based on PID output
+    if (currentDirection == 1)
+    {
+        newLeftSpeed = leftWheelSpeed + output;
+        newRightSpeed = rightWheelSpeed - output;
+    } else {
+        newLeftSpeed = leftWheelSpeed - output;
+        newRightSpeed = rightWheelSpeed + output;
+    }
 
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
-    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), 500);
 
-    // Apply new speeds
+    // Apply new speeds if goStraight is true
     if (goStraight == true)
     {
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
-
-        // Debugging prints
         /*
+        printfUart0("ax: %f  ay: %f  az: %f  gx: %f  gy: %f  gz: %f\n", &fax, &fay , &faz, &fgx, &fgy, &fgz);
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
-        printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, lastError, integral);
-        printfUart0("derivative = %d   output = %d   ", derivative, output);
-        printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
+        printfUart0("Error = %f   LastError = %f   Integral = %d   ", &gyroError, &lastGyroError, integral);
+        printfUart0("derivative = %f   output = %d \n", &derivative, output);
+        //waitMicrosecond(100000);
+        //printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
         */
     }
 
-    // Save the current state for the next iteration
-    lastLeftWheelInterrupt = leftWheelOpticalInterrupt;
-    lastRightWheelInterrupt = rightWheelOpticalInterrupt;
-    lastError = error;
+    // Save the current error for the next iteration
+    lastGyroError = gyroError;
 
     // Clear timer interrupt
     TIMER2_ICR_R = TIMER_ICR_TATOCINT;

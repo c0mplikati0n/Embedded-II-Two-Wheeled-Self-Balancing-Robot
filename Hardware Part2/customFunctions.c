@@ -62,5 +62,77 @@ void readNprintMPU6050(void)
     printfUart0("tilt Angle   =    %f\n\n", &tiltAngle);
 }
 
+/*
+float coeffKp = 10;  // Proportional coefficient
+float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKd = 0;   // Derivative coefficient
 
+int32_t integral = 0;
+int32_t iMax = 100; // 100
+
+int32_t prevLeftWheelOpticalInterrupt = 0;
+
+void pidISR()
+{
+    static int32_t lastError = 0;
+    static int32_t lastLeftWheelInterrupt = 0;
+    static int32_t lastRightWheelInterrupt = 0;
+
+    /
+    if (leftWheelOpticalInterrupt - prevLeftWheelOpticalInterrupt > 4) {
+        leftWheelOpticalInterrupt = prevLeftWheelOpticalInterrupt;
+    } else {
+        prevLeftWheelOpticalInterrupt = leftWheelOpticalInterrupt;
+    }
+
+    if (leftWheelOpticalInterrupt > (rightWheelOpticalInterrupt + 10)) {
+        leftWheelOpticalInterrupt = rightWheelOpticalInterrupt;
+    }
+    /
+
+    // Calculate the difference in the number of interrupts since the last check
+    int32_t leftWheelInterruptDelta = leftWheelOpticalInterrupt - lastLeftWheelInterrupt;
+    int32_t rightWheelInterruptDelta = rightWheelOpticalInterrupt - lastRightWheelInterrupt;
+
+    // Error is the difference in distance traveled by each wheel
+    int32_t error = leftWheelInterruptDelta - rightWheelInterruptDelta;
+
+    integral += error;
+    if (integral > iMax) integral = iMax;
+    if (integral < -iMax) integral = -iMax;
+
+    int32_t derivative = error - lastError;
+
+    int32_t output = coeffKp * error + coeffKi * integral + coeffKd * derivative;
+
+    // Adjusting the motor speed based on PID output
+    int32_t newLeftSpeed = leftWheelSpeed + output;
+    int32_t newRightSpeed = rightWheelSpeed - output;
+
+    newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
+    newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
+
+    // Apply new speeds
+    if (goStraight == true)
+    {
+        setDirection(currentDirection, newLeftSpeed, newRightSpeed);
+
+        // Debugging prints
+        /
+        printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
+        printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, lastError, integral);
+        printfUart0("derivative = %d   output = %d   ", derivative, output);
+        printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
+        /
+    }
+
+    // Save the current state for the next iteration
+    lastLeftWheelInterrupt = leftWheelOpticalInterrupt;
+    lastRightWheelInterrupt = rightWheelOpticalInterrupt;
+    lastError = error;
+
+    // Clear timer interrupt
+    TIMER2_ICR_R = TIMER_ICR_TATOCINT;
+}
+ */
 
