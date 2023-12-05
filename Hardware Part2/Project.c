@@ -58,8 +58,6 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-void rotate(uint8_t degrees, bool direction);
-
 //-----------------------------------------------------------------------------
 // Global variables
 //-----------------------------------------------------------------------------
@@ -115,8 +113,8 @@ ButtonAction currentButtonAction = NONE;
 ButtonState currentButtonState = BUTTON_RELEASED;
 NEC_State currentState = NEC_IDLE;
 
-uint32_t data = 0; // Stores the decoded data
-uint8_t bitCount = 0; // Bit counter for the 32-bits of data
+uint32_t data = 0;    // Stores the decoded IR data
+uint8_t bitCount = 0; // Bit counter for the 32-bits of IR data
 
 uint32_t lastDecodedData = 0; // Stores the last valid decoded data
 
@@ -131,6 +129,7 @@ bool goBalance = true;      // if true robot will balance
 bool amRotate = false;
 
 
+
 uint16_t leftWheelSpeed;
 uint16_t rightWheelSpeed;
 uint16_t currentDirection;
@@ -141,33 +140,7 @@ int32_t rightWheelOpticalInterrupt = 0;
 int32_t leftWheelDistanceTraveled = 0;
 int32_t rightWheelDistanceTraveled = 0;
 
-
-
-
-// MPU6050 Registers
-#define MPU6050_PWR_MGMT_1 0x6B
-#define MPU6050_ACCEL_SENSITIVITY 0x1C //
-#define MPU6050_GYRO_SENSITIVITY 0x1B  //
-
-#define MPU6050_OUT_TEMP_H 0x41
-#define MPU6050_OUT_TEMP_L 0x42
-
-#define MPU6050_OUTX_H_G 0x43
-#define MPU6050_OUTX_L_G 0x44
-#define MPU6050_OUTY_H_G 0x45
-#define MPU6050_OUTY_L_G 0x46
-#define MPU6050_OUTZ_H_G 0x47
-#define MPU6050_OUTZ_L_G 0x48
-
-#define MPU6050_OUTX_H_XL 0x3B
-#define MPU6050_OUTX_L_XL 0x3C
-#define MPU6050_OUTY_H_XL 0x3D
-#define MPU6050_OUTY_L_XL 0x3E
-#define MPU6050_OUTZ_H_XL 0x3F
-#define MPU6050_OUTZ_L_XL 0x40
-
-#define MPU6050_ACCEL_XOUT_H 0x3B
-#define MPU6050_GYRO_XOUT_H  0x43
+int16_t ax, ay, az, gx, gy, gz;
 
 //-----------------------------------------------------------------------------
 // Subroutines
@@ -175,6 +148,7 @@ int32_t rightWheelDistanceTraveled = 0;
 
 void processDecodedData(uint32_t data);
 void handleButtonAction(void);
+void rotate(uint8_t degrees, bool direction);
 
 //-----------------------------------------------------------------------------
 // Initialize Hardware
@@ -223,6 +197,8 @@ void initHw(void)
     enablePinPullup(PB_2);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void enableTimerMode()
 {
     // IR sensor // TSOP13438 38kHz AGC4
@@ -255,11 +231,17 @@ void enableTimerMode()
     WTIMER5_CTL_R |= TIMER_CTL_TAEN;                 // turn-on counter
     NVIC_EN3_R |= 1 << (INT_WTIMER5A-16-96);         // turn-on interrupt 120 (WTIMER5A)
 
+    // Time in Seconds = (load / 40,000,000)
+    // Hz = (40,000,000 / load)
+
     // Configure Timer 1 for PID controller (Balance)
     TIMER1_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER1_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER1_TAILR_R = 1000000;                          // set load value to 40000 for 1000 Hz interrupt rate // original was 4,000,000
+    TIMER1_TAILR_R = 1000000;                        // set load value to 40,000 for 1000 Hz interrupt rate // original was 4,000,000 = 10 Hz
+                                                     // I think 5,000,000 would be good, 8 Hz
+                                                     // 1,000,000 = 40 Hz
+
     TIMER1_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
     NVIC_EN0_R = 1 << (INT_TIMER1A-16);              // turn-on interrupt 37 (TIMER1A)
     TIMER1_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
@@ -273,6 +255,8 @@ void enableTimerMode()
     NVIC_EN0_R = 1 << (INT_TIMER2A-16);              // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 volatile uint32_t timeElapsed = 0;  // global variable to store time
 volatile uint32_t currentTime = 0;
@@ -356,14 +340,13 @@ void IRdecoder(void) //fine tweak still
     WTIMER3_ICR_R = TIMER_ICR_CAECINT;
 }
 
-//*
 void wideTimer3Isr()
 {
     togglePinValue(GREEN_LED);
     IRdecoder();
-    //printfUart0("Bit Count:   %u\n", bitCount);
 }
-//*/
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void processDecodedData(uint32_t data)
 {
@@ -461,6 +444,8 @@ void processDecodedData(uint32_t data)
             currentButtonAction = NONE;
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // This is what is called from main
 void handleButtonAction(void)
@@ -792,24 +777,34 @@ void handleButtonAction(void)
     }
 }
 
-void rotate(uint8_t degrees, bool direction)
-{
-    //uint32_t wheelRotationsNeeded = calculateRotationsForDegrees(degrees);
-    if(direction) //CW
-    {
-        //setWheelSpeed(leftWheel, wheelRotationsNeeded * wheelSpeedPerRotation);
-        //setWheelSpeed(rightWheel, -wheelRotationsNeeded * wheelSpeedPerRotation);
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+volatile float currentRotation = 0.0; // Total rotation angle in degrees
+
+void rotate(uint8_t degrees, bool direction) {
+    // Reset rotation angle
+    currentRotation = 0.0;
+
+    // Set wheel speeds for rotation
+    if (direction) {
+        setDirectionOld(0, 0, 1000, 0, 1000);
+        //setDirectionOld(0, 850, 0, 850, 0);
+    } else {
+        setDirectionOld(0, 1000, 0, 1000, 0);
+        //setDirectionOld(0, 0, 850, 0, 850);
     }
-    else // COUNTERCLOCKWISE
+
+    // Wait until the desired angle is reached
+    while (fabs(currentRotation) < degrees)
     {
-        //setWheelSpeed(leftWheel, -wheelRotationsNeeded * wheelSpeedPerRotation);
-        //setWheelSpeed(rightWheel, wheelRotationsNeeded * wheelSpeedPerRotation);
+        printfUart0("currentRotation = %f \n", &currentRotation);
+        waitMicrosecond(10000); // 10ms
     }
-    //waitUntilRotationComplete(); // You need to implement this based on your sensors
+
+    turnOffAll();
 }
 
-
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Left Wheel // OPB876N55 Optical Interrupter // PC6 // WT1CCP0
 void wideTimer1Isr()
@@ -841,19 +836,14 @@ void wideTimer5Isr()
     WTIMER5_ICR_R = TIMER_ICR_CAECINT;
 }
 
-// pid calculation of u
-float coeffKp = 10; // Proportional coefficient
-float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
-float coeffKd = 0; // Derivative coefficient
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int32_t coeffKo = 0;
-//int32_t coeffK = 100; // denominator used to scale Kp, Ki, and Kd
+float coeffKp = 10;  // Proportional coefficient
+float coeffKi = .06; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKd = 0;   // Derivative coefficient
+
 int32_t integral = 0;
 int32_t iMax = 100; // 100
-int32_t diff;
-//int32_t error;
-int32_t u = 0;
-int32_t deadBand = 0;
 
 int32_t prevLeftWheelOpticalInterrupt = 0;
 
@@ -882,21 +872,17 @@ void pidISR()
     // Error is the difference in distance traveled by each wheel
     int32_t error = leftWheelInterruptDelta - rightWheelInterruptDelta;
 
-    // Integral term with windup guard
     integral += error;
     if (integral > iMax) integral = iMax;
     if (integral < -iMax) integral = -iMax;
 
-    // Derivative term
     int32_t derivative = error - lastError;
 
-    // PID output
     int32_t output = coeffKp * error + coeffKi * integral + coeffKd * derivative;
 
     // Adjusting the motor speed based on PID output
-    // Assuming leftWheelSpeed and rightWheelSpeed are your baseline speeds
-    int32_t newLeftSpeed = leftWheelSpeed + output;   // Adjusting left wheel speed
-    int32_t newRightSpeed = rightWheelSpeed - output; // Adjusting right wheel speed
+    int32_t newLeftSpeed = leftWheelSpeed + output;
+    int32_t newRightSpeed = rightWheelSpeed - output;
 
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
@@ -907,13 +893,12 @@ void pidISR()
         setDirection(currentDirection, newLeftSpeed, newRightSpeed);
 
         // Debugging prints
-        //*
+        /*
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, lastError, integral);
         printfUart0("derivative = %d   output = %d   ", derivative, output);
         printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
-        //printfUart0("                               LWS = %u   RWS = %u\n", leftWheelSpeed, rightWheelSpeed);
-        //*/
+        */
     }
 
     // Save the current state for the next iteration
@@ -925,20 +910,25 @@ void pidISR()
     TIMER2_ICR_R = TIMER_ICR_TATOCINT;
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void readMPU6050(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz)
 {
     uint8_t data[14];
-    readI2c1Registers(MPU6050, MPU6050_ACCEL_XOUT_H, data, 14);
+    readI2c1Registers(MPU6050, 0x3B, data, 14);
 
     *ax = (data[0] << 8) | data[1];
     *ay = (data[2] << 8) | data[3];
     *az = (data[4] << 8) | data[5];
 
+    // data[6] and data[7] are temperature, not needed for now
+
     *gx = (data[8] << 8) | data[9];
     *gy = (data[10] << 8) | data[11];
     *gz = (data[12] << 8) | data[13];
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // pid calculation of u
 float balanceKp = 2; // Proportional coefficient
@@ -966,8 +956,11 @@ void balancePID()
 {
     static int32_t balanceLastError = 0;
 
-    int16_t ax, ay, az, gx, gy, gz;
+    //int16_t ax, ay, az, gx, gy, gz;
     readMPU6050(&ax, &ay, &az, &gx, &gy, &gz);
+
+    // Assuming gyroscope data is in degrees per second and balancePID is called every 25ms
+    currentRotation += (gz / 131.0) * 0.025; // 0.025 is the time in seconds (25ms)
 
     float fax = (ax/16384.0);
     float fay = (ay/16384.0);
@@ -987,16 +980,10 @@ void balancePID()
 
     int32_t derivative = error - balanceLastError;
 
-    // PID output
     int32_t output = balanceKp * error + balanceKi * balanceIntegral + balanceKd * derivative;
-
-    // Speed limit checks
-    //int32_t newLeftSpeed = leftWheelSpeed - output;
-    //int32_t newRightSpeed = rightWheelSpeed + output;
 
     // Determine the base speed for balancing, you may need to tweak this
     int32_t baseSpeed = 800; // Example base speed
-    //int32_t speedAdjustment = abs(output); // Consider the magnitude of the output
 
     if(goStraight == false)
     {
@@ -1030,22 +1017,22 @@ void balancePID()
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, balanceLastError, balanceIntegral);
         printfUart0("derivative = %d   output = %d\n", derivative, output);
+        waitMicrosecond(100000);
         */
     }
 
-    balanceLastError = error; // Save last error for next derivative calculation
+    balanceLastError = error;
 
     // Clear timer interrupt
     TIMER1_ICR_R = TIMER_ICR_TATOCINT;
 }
 
-#define MPU6050_ACCEL_CONFIG 0x1C
-#define MPU6050_GYRO_CONFIG 0x1B
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Function to initialize and configure the MPU6050
+// Initialize and Configure MPU-6050
 void initMPU6050() {
     // Wake up the MPU6050 - write 0 to the power management register
-    writeI2c1Register(MPU6050, MPU6050_PWR_MGMT_1, 0x00);
+    writeI2c1Register(MPU6050, 0x6B, 0x00);
     waitMicrosecond(10000);
 
     // Set accelerometer sensitivity to +/- 2g
@@ -1053,14 +1040,14 @@ void initMPU6050() {
     // 0x08 for +/- 4g
     // 0x10 for +/- 8g
     // 0x18 for +/- 16g
-    writeI2c1Register(MPU6050, MPU6050_ACCEL_CONFIG, 0x00);
+    writeI2c1Register(MPU6050, 0x1C, 0x00);
 
     // Set gyroscope sensitivity to +/- 250 degrees/second
     // 0x00 for +/- 250 degrees/sec         = (250 / 360) * 60  = 41.6667  RPM
     // 0x08 for +/- 500 degrees/sec         = (500 / 360) * 60  = 83.3333  RPM
     // 0x10 for +/- 1000 degrees/sec        = (1000 / 360) * 60 = 166.6667 RPM
     // 0x18 for +/- 2000 degrees/sec        = (2000 / 360) * 60 = 333.3333 RPM
-    writeI2c1Register(MPU6050, MPU6050_GYRO_CONFIG, 0x00);
+    writeI2c1Register(MPU6050, 0x1B, 0x00);
 }
 
 
@@ -1107,15 +1094,9 @@ int main(void)
             currentButtonState = BUTTON_RELEASED;
             //currentButtonAction = NONE; // this breaks the code
 
-            //printfUart0("Button Released\n");
-            //actionHeldExecuted = false;
-            //actionReleasedExecuted = false;
-
             leftWheelOpticalInterrupt = 0;
             rightWheelOpticalInterrupt = 0;
             goStraight = false;
-
-            //pidcount = 0;
         }
 
         handleButtonAction();
