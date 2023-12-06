@@ -269,7 +269,7 @@ void enableTimerMode()
     TIMER1_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER1_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER1_TAILR_R = 4500000;                        // set load value to 40,000 for 1000 Hz interrupt rate // original was 4,000,000 = 10 Hz
+    TIMER1_TAILR_R = 1000000;                        // set load value to 40,000 for 1000 Hz interrupt rate // original was 4,000,000 = 10 Hz
                                                      // I think 5,000,000 would be good, 8 Hz
                                                      // 1,000,000 = 40 Hz = 25ms
 
@@ -281,7 +281,7 @@ void enableTimerMode()
     TIMER2_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
     TIMER2_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
     TIMER2_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
-    TIMER2_TAILR_R = 40000;                          // set load value to 40000 for 1000 Hz interrupt rate / once per ms
+    TIMER2_TAILR_R = 400000;                          // set load value to 40000 for 1000 Hz interrupt rate / once per ms
     TIMER2_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
     NVIC_EN0_R = 1 << (INT_TIMER2A-16);              // turn-on interrupt 39 (TIMER2A)
     TIMER2_CTL_R |= TIMER_CTL_TAEN;                  // turn-on timer
@@ -507,6 +507,7 @@ void handleButtonAction(void)
         case FORWARD_FAST:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
                 goStraight = true;
                 leftWheelOpticalInterrupt = 0;
@@ -517,6 +518,7 @@ void handleButtonAction(void)
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 goStraight = false;
+                amRotate = false;
                 slowDown(1, 1023, 1023);
                 turnOffAll();
                 actionReleasedExecuted = true;
@@ -528,6 +530,7 @@ void handleButtonAction(void)
         case FORWARD_NORMAL:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
@@ -540,6 +543,7 @@ void handleButtonAction(void)
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 goStraight = false;
+                amRotate = false;
                 //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
@@ -551,6 +555,7 @@ void handleButtonAction(void)
         case FORWARD_SLOW:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setDirection(1, 1023, 1023); // Both wheels go forwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
@@ -563,6 +568,7 @@ void handleButtonAction(void)
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 goStraight = false;
+                amRotate = false;
                 //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
@@ -575,6 +581,7 @@ void handleButtonAction(void)
         case BACK_FAST:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
                 goStraight = true;
                 leftWheelOpticalInterrupt = 0;
@@ -585,6 +592,7 @@ void handleButtonAction(void)
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 goStraight = false;
+                amRotate = false;
                 slowDown(0, 1023, 1023);
 
                 turnOffAll();
@@ -597,6 +605,7 @@ void handleButtonAction(void)
         case BACK_NORMAL:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
+                amRotate = true;
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
@@ -609,6 +618,7 @@ void handleButtonAction(void)
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 goStraight = false;
+                amRotate = false;
                 //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
                 actionReleasedExecuted = true;
@@ -620,7 +630,7 @@ void handleButtonAction(void)
         case BACK_SLOW:
             if (currentButtonState == BUTTON_HELD && !actionHeldExecuted)
             {
-                //amRotate = true;
+                amRotate = true;
                 setDirection(0, 1023, 1023); // Both wheels go backwards
                 waitMicrosecond(100000);
                 setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go backwards
@@ -633,6 +643,7 @@ void handleButtonAction(void)
             else if (currentButtonState == BUTTON_RELEASED && !actionReleasedExecuted)
             {
                 goStraight = false;
+                amRotate = false;
                 //amRotate = false;
                 //slowDown(currentDirection, leftWheelSpeed, rightWheelSpeed);
                 turnOffAll();
@@ -899,19 +910,19 @@ void rotate(uint8_t degrees, bool direction) {
     if (direction) {
         setDirectionOld(0, 0, 1000, 0, 1000);
         currentGyroRotation -= degrees; //CCW
-        degrees -= 10;
+        degrees -= 0;
     } else {
         setDirectionOld(0, 1000, 0, 1000, 0);
         currentGyroRotation += degrees; // CW
-        degrees -= 14; //bigger number decreases extra movement?
+        degrees -= 0;
     }
 
-    printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
+    //printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
 
     // Wait until the desired angle is reached
-    while (fabs(currentRotation) < (degrees/2))
+    while (fabs(currentRotation) < (degrees/3))
     {
-        printfUart0("currentRotation = %f \n", &currentRotation);
+        //printfUart0("currentRotation = %f \n", &currentRotation);
         //waitMicrosecond(10000); // 10ms
     }
 
@@ -953,8 +964,8 @@ void wideTimer5Isr()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float coeffKp = 2.5;  // Proportional coefficient // 2.5 is okay
-float coeffKi = 0.5; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
+float coeffKp = 2.2;  // Proportional coefficient // 2.5 is okay
+float coeffKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float coeffKd = 0;   // Derivative coefficient
 
 int32_t integral = 0;
@@ -973,6 +984,11 @@ void pidISR()
 
     // Error is the rate of rotation around z axis
     gyroError = fgz; // deg/sec
+    //gyroError = fgy; // deg/sec
+
+    //float tiltResult = atan2(fax, faz) * 180.0 / PI;
+    //gyroError = atan2(fay, fax) * 180.0 / PI;
+    //gyroError = atan2(fax, fay) * 180.0 / PI;
 
     // deadband?
     if (fabs(gyroError) < 5)
@@ -987,13 +1003,13 @@ void pidISR()
     float derivative = gyroError - lastGyroError;
     output = coeffKp * gyroError + coeffKi * integral + coeffKd * derivative;
 
-    if (currentDirection == 1)
+    if (currentDirection == 1) // forward
     {
-        newLeftSpeed = leftWheelSpeed + output;
-        newRightSpeed = rightWheelSpeed - output;
-    } else {
         newLeftSpeed = leftWheelSpeed - output;
         newRightSpeed = rightWheelSpeed + output;
+    } else {
+        newLeftSpeed = leftWheelSpeed + output;
+        newRightSpeed = rightWheelSpeed - output;
     }
 
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
@@ -1008,7 +1024,7 @@ void pidISR()
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %f   LastError = %f   Integral = %d   ", &gyroError, &lastGyroError, integral);
         printfUart0("derivative = %f   output = %d \n", &derivative, output);
-        //waitMicrosecond(100000);
+        waitMicrosecond(100000);
         //printfUart0("LWOI = %d   RWOI = %d\n", leftWheelOpticalInterrupt, rightWheelOpticalInterrupt);
         */
     }
@@ -1049,7 +1065,7 @@ void readMPU6050()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float balanceKp = 8; // Proportional coefficient // 2 was working
+float balanceKp = 2; // Proportional coefficient
 float balanceKi = 0; // Integral coefficient // should get me most of the way there // should be 1/100th to maybe 1/20th of kp
 float balanceKd = 0; // Derivative coefficient
 
@@ -1071,7 +1087,7 @@ void balancePID()
     currentRotation += fgz * 0.025; // 25ms
 
     float tiltAngle = calculateTiltAngle();
-    int32_t error = (-8) - tiltAngle; // Desired angle is 0
+    int32_t error = 0 - tiltAngle; // Desired angle is 0
 
     balanceIntegral += error;
     if (balanceIntegral > balanceiMax) balanceIntegral = balanceiMax;
@@ -1082,7 +1098,7 @@ void balancePID()
     int32_t output = balanceKp * error + balanceKi * balanceIntegral + balanceKd * derivative;
 
     // Base speed for balancing, may need to tweak this
-    int32_t baseSpeed = 700;
+    int32_t baseSpeed = 800;
 
     if(goStraight == false)
     {
@@ -1090,52 +1106,32 @@ void balancePID()
         rightWheelSpeed = baseSpeed;
     }
 
-    bool direction = (tiltAngle < -14); // Forward for negative tilt, backward for positive tilt
+    bool direction = (tiltAngle < 0); // Forward for negative tilt, backward for positive tilt
 
     // Adjust wheel speeds based on PID output
     int32_t newLeftSpeed = (direction ? leftWheelSpeed + output : leftWheelSpeed - output);
     int32_t newRightSpeed = (direction ? rightWheelSpeed + output : rightWheelSpeed - output);
 
-    //int32_t newLeftSpeed = leftWheelSpeed - output;
-    //int32_t newRightSpeed = rightWheelSpeed - output;
-
-    if (!direction)
-    {
-        newLeftSpeed += 100;
-        newRightSpeed += 100;
-    }
-
     newLeftSpeed = MAX(MIN(newLeftSpeed, MAX_SPEED), MIN_SPEED);
     newRightSpeed = MAX(MIN(newRightSpeed, MAX_SPEED), MIN_SPEED);
 
-    float balanceThreshold = 0.0; // Adjust // was 20 // decrease makes it stop going back so much
-    float negBalanceThreshold = -18.0; // Adjust // was 20
-    if (fabs(tiltAngle) > 70) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
+    float balanceThreshold = 20.0; // Adjust
+    if (((fabs(tiltAngle) < balanceThreshold) || (fabs(tiltAngle) > 80)) && (amRotate == false)) // the robot seems to currently tilt a bit forward when balanced so maybe change the conditions here
     {
         newLeftSpeed = 0; // Turn off motors when balanced
         newRightSpeed = 0; // Turn off motors when balanced
-        //goStraight = false;
     }
-    // FORWARDS
-    if ((direction && (tiltAngle > negBalanceThreshold)) || (!direction && (tiltAngle < balanceThreshold)))
-    {
-        newLeftSpeed = 0; // Turn off motors when balanced
-        newRightSpeed = 0; // Turn off motors when balanced
-        //goStraight = false;
-    }
-
     if ((goBalance == true) && (amRotate == false))
     {
         setDirection(direction, newLeftSpeed, newRightSpeed);
-        //goStraight = true;
-        ///*
-        //printfUart0("ax: %f  ay: %f  az: %f  gx: %f  gy: %f  gz: %f  Tilt Angle = %f\n", &fax, &fay , &faz, &fgx, &fgy, &fgz, &tiltAngle);
-        //*
+        /*
+        printfUart0("ax: %f  ay: %f  az: %f  gx: %f  gy: %f  gz: %f  Tilt Angle = %f\n", &fax, &fay , &faz, &fgx, &fgy, &fgz, &tiltAngle);
+
         printfUart0("Left = %d   Right = %d   ", newLeftSpeed, newRightSpeed);
         printfUart0("Error = %d   LastError = %d   Integral = %d   ", error, balanceLastError, balanceIntegral);
         printfUart0("derivative = %d   output = %d\n", derivative, output);
-        //waitMicrosecond(100000);
-        //*/
+        waitMicrosecond(100000);
+        */
         //printfUart0("Left = %d   Right = %d\n", newLeftSpeed, newRightSpeed);
     }
 
@@ -1206,6 +1202,10 @@ int main(void)
     // START condition (S) on the bus, which is defined as a HIGH-to-LOW transition of the SDA line while SCL line is HIGH
     initMPU6050();
 
+    USER_DATA data;
+    char str[80];
+    bool valid = false;
+
     while (true)
     {
         if((WTIMER3_TAV_R / 40) > 200000)
@@ -1220,6 +1220,106 @@ int main(void)
 
         handleButtonAction();
 
-        //waitMicrosecond(1000000);
+        if(kbhitUart0())
+        {
+            putsUart0(" > ");
+            valid = false;
+
+            getsUart0(&data);
+            putsUart0(data.buffer);
+
+            // Parse fields
+            parseFields(&data);
+
+            if (isCommand(&data, "angle", 0))
+            {
+                printfUart0("currentGyroRotation = %f \n", &currentGyroRotation);
+            }
+
+            if (isCommand(&data, "clear", 0))
+            {
+                printfUart0("currentGyroRotation Cleared \n");
+                currentGyroRotation = 0;
+            }
+
+            // alarm_pulse min max
+            if (isCommand(&data, "tilt", 0))
+            {
+                float currentTilt = calculateTiltAngle();
+                printfUart0("current Tilt = %f degrees\n", &currentTilt);
+            }
+
+            if (isCommand(&data, "forward", 0))
+            {
+                amRotate = true;
+                setDirection(1, 1023, 1023); // Both wheels go forwards
+                waitMicrosecond(100000);
+                leftWheelSpeed = 850;
+                rightWheelSpeed = 850;
+                currentDirection = 1;
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
+                goStraight = true;
+                waitMicrosecond(2500000);
+                goStraight = false;
+                amRotate = false;
+                turnOffAll();
+            }
+
+            if (isCommand(&data, "reverse", 0))
+            {
+                amRotate = true;
+                setDirection(0, 1023, 1023); // Both wheels go forwards
+                waitMicrosecond(100000);
+                leftWheelSpeed = 850;
+                rightWheelSpeed = 850;
+                currentDirection = 0;
+                setDirection(currentDirection, leftWheelSpeed, rightWheelSpeed); // Both wheels go forwards
+                goStraight = true;
+                waitMicrosecond(2500000);
+                goStraight = false;
+                amRotate = false;
+                turnOffAll();
+            }
+
+            if (isCommand(&data, "rotate", 1))
+            {
+                char* str = getFieldString(&data, 1);
+                valid = true;
+
+                if(customStrcmp("cw", str))
+                {
+                    amRotate = true;
+                    rotate(90, false);
+                    amRotate = false;
+                    turnOffAll();
+                }
+                else if(customStrcmp("ccw", str))
+                {
+                    amRotate = true;
+                    rotate(90, true);
+                    amRotate = false;
+                    turnOffAll();
+                }
+            }
+
+            if (!valid)
+            {
+                //putsUart0("\nInvalid command\n");
+            }
+        }
+
+        //If “angle” is received, the current angle of rotation, relative to the power-on setting or the last clear
+
+        //command is shown in degrees. This is intended to be accurate only when the robot platform is quasi-
+        //stationary.
+
+        //If “angle clear” is received, the current angle is set to 0 degrees.
+        //If “tilt” is received, the angle with respect to vertical is shown in degrees. This is intended to be accurate
+        //only when the robot platform is quasi-stationary.
+        //If “forward” is received, the robot platform should travel forward by 1m straight line.
+        //If “reverse” is received, the robot platform should travel forward by 1m in a straight line.
+        //If “rotate cw” is received, the robot platform should rotate CW by 90 degrees.
+        //If “rotate ccw” is received, the robot platform should rotate CCW by 90 degrees.
+
     }
 }
