@@ -4,6 +4,8 @@
 
 This project involves the design, development, and creation of a **two-wheeled, self-balancing robot**. The robot is designed to maintain its balance and respond to commands using an **MPU6050 3-axis accelerometer and gyroscope**. The project was completed for the **CSE 4342** course, with the main objective of achieving balance control and precise movement.
 
+![Robot Picture](assets/picture.png)
+
 ## License and Usage
 
 This project was developed as a school assignment, and while the code is provided free to use for learning and reference, it is strictly prohibited to use this code or its derivatives for any academic submission or coursework. Doing so would be considered academic dishonesty and a violation of school policies.
@@ -36,3 +38,6 @@ An **IR sensor** was integrated to control the robot using a remote. Commands su
 The project’s hardware design followed the following Schematic.
 
 ![Robot Schematic](assets/schematic.png)
+
+![Robot Layout](assets/layout.png)
+
