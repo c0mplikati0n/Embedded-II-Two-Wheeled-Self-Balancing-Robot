@@ -32,6 +32,7 @@ A **command-line user interface** was implemented using UART0, allowing interact
 ### IR Sensor Control
 An **IR sensor** was integrated to control the robot using a remote. Commands such as forward, reverse, and rotate can be issued via the remote, and the robot responds reliably. The IR signal decoding is handled by the `IRdecoder` function.
 
-### Board Layout
+## Board Layout
 The project’s hardware design followed the following Schematic.
 
+![Robot Schematic](assets/schematic.png)
